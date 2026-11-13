@@ -22,7 +22,11 @@ const ITEMS: Item[] = [
   { action: "fit-view", label: "全体表示" },
 ];
 
-export function Toolbar({ getViewport }: { getViewport: () => Viewport }) {
+export function Toolbar({ getViewport, onOpenWorks, onOpenExport }: {
+  getViewport: () => Viewport;
+  onOpenWorks?: () => void;
+  onOpenExport?: () => void;
+}) {
   const multi = useEditor((s) => s.multiSelect);
   const solo = useEditor((s) => s.solo);
   return (
@@ -50,7 +54,10 @@ export function Toolbar({ getViewport }: { getViewport: () => Viewport }) {
           );
         })}
       </div>
-      <div className="toolbar-end" data-slot="toolbar-end" />
+      <div className="toolbar-end" data-slot="toolbar-end">
+        <button type="button" className="btn" data-action="works" onClick={(e) => { onOpenWorks?.(); e.currentTarget.blur(); }}>作品</button>
+        <button type="button" className="btn" data-action="export" onClick={(e) => { onOpenExport?.(); e.currentTarget.blur(); }}>書き出し</button>
+      </div>
     </>
   );
 }

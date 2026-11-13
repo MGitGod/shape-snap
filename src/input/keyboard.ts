@@ -58,6 +58,8 @@ const ARROWS = new Set<ActionId>(["move-up", "move-down", "move-left", "move-rig
 export function attachKeyboard(getViewport: () => Viewport): () => void {
   const onKeyDown = (e: KeyboardEvent): void => {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
+    // A modal (dialog/menu) handles its own Escape; every other key is ignored while it is open.
+    if (document.querySelector("[data-modal]")) return;
     if (isTextField(e.target)) {
       if (e.key === "Escape") e.target.blur();
       return;
