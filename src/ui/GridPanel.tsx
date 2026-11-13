@@ -1,7 +1,15 @@
 import { addGuideAtCursor, clearGuidesAction, removeGuideAction, setGridProp } from "../editor/actions";
 import { currentDoc } from "../editor/state";
-import { dispatch, useEditor } from "../editor/store";
+import { dispatch, editorStore, useEditor } from "../editor/store";
 import { SliderField } from "./SliderField";
+
+/** World point at the middle of the visible canvas, for guides added from the panel. */
+function canvasCentre(): { x: number; y: number } {
+  const r = document.querySelector('[data-testid="canvas"]')?.getBoundingClientRect();
+  const v = editorStore.getState().view;
+  if (!r) return { x: 0, y: 0 };
+  return { x: (r.width / 2 - v.panX) / v.zoom, y: (r.height / 2 - v.panY) / v.zoom };
+}
 
 export function GridPanel() {
   const grid = useEditor((s) => currentDoc(s).grid);
@@ -63,7 +71,7 @@ export function GridPanel() {
           className="btn"
           data-guide-action="add-h"
           onClick={(e) => {
-            dispatch((s) => addGuideAtCursor(s, "h"));
+            dispatch((s) => addGuideAtCursor(s, "h", undefined, canvasCentre()));
             e.currentTarget.blur();
           }}
         >
@@ -74,7 +82,7 @@ export function GridPanel() {
           className="btn"
           data-guide-action="add-v"
           onClick={(e) => {
-            dispatch((s) => addGuideAtCursor(s, "v"));
+            dispatch((s) => addGuideAtCursor(s, "v", undefined, canvasCentre()));
             e.currentTarget.blur();
           }}
         >

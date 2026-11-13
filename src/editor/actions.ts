@@ -241,10 +241,14 @@ export function toggleFillNoneSelection(s: EditorState, now?: number): EditorSta
   return withDoc(s, { ...doc, nodes }, undefined, now);
 }
 
-export function addGuideAtCursor(s: EditorState, axis: "h" | "v", now?: number): EditorState {
-  if (!s.cursor) return { ...s, notice: "カーソルをキャンバスに置いてから押してください" };
+/** `at` is used when the cursor is not over the canvas (e.g. the panel buttons): the
+ *  selected shape's centre if there is one, otherwise the point the caller passes. */
+export function addGuideAtCursor(s: EditorState, axis: "h" | "v", now?: number, at?: Point): EditorState {
+  const main = primaryNode(s);
+  const from = s.cursor ?? (main ? { x: main.transform.x, y: main.transform.y } : at);
+  if (!from) return { ...s, notice: "カーソルをキャンバスに置いてから押してください" };
   const doc = currentDoc(s);
-  const snapped = snapPointToDoc(s.cursor, doc);
+  const snapped = snapPointToDoc(from, doc);
   const next = addGuide(doc, axis, axis === "h" ? snapped.y : snapped.x);
   return next === doc ? s : withDoc(s, next, undefined, now);
 }
