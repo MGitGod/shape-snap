@@ -8,6 +8,7 @@ const ITEMS: Item[] = [
   { action: "place-rect", label: "四角" },
   { action: "place-ellipse", label: "円" },
   { action: "place-polygon", label: "多角形" },
+  { action: "line", label: "線" },
   "sep",
   { action: "duplicate", label: "複製" },
   { action: "delete", label: "消す" },
@@ -16,6 +17,7 @@ const ITEMS: Item[] = [
   { action: "scale-down", label: "縮小" },
   { action: "scale-up", label: "拡大" },
   { action: "rotate-mode", label: "回転" },
+  { action: "smooth", label: "曲線" },
   "sep",
   { action: "multi-select", label: "複数選択" },
   { action: "toggle-solo", label: "ソロ" },
@@ -33,6 +35,7 @@ export function Toolbar({ getViewport, onOpenWorks, onOpenExport }: {
   const multi = useEditor((s) => s.multiSelect);
   const solo = useEditor((s) => s.solo);
   const rotating = useEditor((s) => s.rotateMode);
+  const drawing = useEditor((s) => s.drawing !== null);
   return (
     <>
       <h1>Shape Snap</h1>
@@ -40,7 +43,7 @@ export function Toolbar({ getViewport, onOpenWorks, onOpenExport }: {
         {ITEMS.map((it, i) => {
           if (it === "sep") return <span key={`sep-${i}`} className="tool-sep" aria-hidden="true" />;
           const binding = KEYMAP.find((b) => b.action === it.action);
-          const pressed = it.action === "multi-select" ? multi : it.action === "toggle-solo" ? solo : it.action === "rotate-mode" ? rotating : undefined;
+          const pressed = it.action === "multi-select" ? multi : it.action === "toggle-solo" ? solo : it.action === "rotate-mode" ? rotating : it.action === "line" ? drawing : undefined;
           return (
             <button
               key={it.action}

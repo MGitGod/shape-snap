@@ -87,7 +87,9 @@ test("work file round trip into a new work", async ({ page }) => {
   await page.locator('[data-modal="works"] input[type="file"]').setInputFiles(path);
   await expect(page.locator("[data-modal]")).toHaveCount(0);
   const after = await nodes(page);
-  expect(after.map((x) => x.transform)).toEqual(before.map((x) => x.transform));
+  // JSON drops the sign of -0, so compare with +0 normalised (the toolbar height decides whether a click lands on -0)
+  const norm = (t: { x: number; y: number }) => ({ x: t.x + 0, y: t.y + 0 });
+  expect(after.map((x) => norm(x.transform))).toEqual(before.map((x) => norm(x.transform)));
   expect(after.map((x) => x.kind)).toEqual(before.map((x) => x.kind));
 });
 

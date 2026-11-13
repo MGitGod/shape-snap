@@ -21,6 +21,7 @@ export function CanvasView() {
   const solo = useEditor((s) => s.solo);
   const rotateMode = useEditor((s) => s.rotateMode);
   const cursor = useEditor((s) => s.cursor);
+  const drawing = useEditor((s) => s.drawing);
   const { zoom, panX, panY } = view;
 
   // screen position inside the svg -> world, using the latest view from the store
@@ -74,6 +75,7 @@ export function CanvasView() {
       ref={svgRef}
       data-testid="canvas"
       className="canvas"
+      style={drawing ? { cursor: "crosshair" } : undefined}
       onMouseMove={(e) => dispatch((s) => setCursor(s, toWorld(e)))}
       onMouseLeave={() => dispatch((s) => setCursor(s, null))}
       onClick={(e) => click(e, "left")}
@@ -130,18 +132,19 @@ export function CanvasView() {
           }
           return createElement(spec.tag, { ...attrs, key: n.id, "data-node-id": n.id });
         })}
-        {selected.filter((n) => n.visible).map((n) => (
-          <polygon
-            key={`outline-${n.id}`}
-            points={worldOutline(n).map((p) => `${p.x},${p.y}`).join(" ")}
-            fill="none"
-            stroke="var(--accent)"
-            strokeWidth={2}
-            strokeDasharray={rotateMode ? "6 4" : undefined}
-            vectorEffect="non-scaling-stroke"
-            pointerEvents="none"
-          />
-        ))}
+        {selected.filter((n) => n.visible).map((n) => {
+          const outline = {
+            key: `outline-${n.id}`,
+            points: worldOutline(n).map((p) => `${p.x},${p.y}`).join(" "),
+            fill: "none",
+            stroke: "var(--accent)",
+            strokeWidth: 2,
+            strokeDasharray: rotateMode ? "6 4" : undefined,
+            vectorEffect: "non-scaling-stroke" as const,
+            pointerEvents: "none" as const,
+          };
+          return n.kind === "path" && !n.closed ? <polyline {...outline} /> : <polygon {...outline} />;
+        })}
         {handles.map((h) => {
           const common = {
             "data-handle-id": h.id,
@@ -150,12 +153,67 @@ export function CanvasView() {
             strokeWidth: 2,
             vectorEffect: "non-scaling-stroke" as const,
           };
+          const pt = only && only.kind === "path" && only.smooth ? only.points[h.index] : undefined;
+          if (h.kind === "vertex" && pt?.corner) {
+            const r = VERTEX_PX / 2 / zoom;
+            const d = `M ${h.pos.x} ${h.pos.y - r} L ${h.pos.x + r} ${h.pos.y} L ${h.pos.x} ${h.pos.y + r} L ${h.pos.x - r} ${h.pos.y} Z`;
+            return <path key={h.id} {...common} d={d} data-handle-shape="diamond" />;
+          }
           if (h.kind === "vertex") {
             return <circle key={h.id} {...common} cx={h.pos.x} cy={h.pos.y} r={VERTEX_PX / 2 / zoom} />;
           }
           const size = (h.kind === "corner" ? CORNER_PX : HANDLE_PX) / zoom;
           return <rect key={h.id} {...common} x={h.pos.x - size / 2} y={h.pos.y - size / 2} width={size} height={size} />;
         })}
+        {drawing && (
+          <g data-testid="drawing-preview" pointerEvents="none" fill="none" stroke="var(--accent)" strokeWidth={2}>
+            {drawing.points.length > 1 && (
+              <polyline
+                points={drawing.points.map((p) => `${p.x},${p.y}`).join(" ")}
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {snapTarget && drawing.points.length > 0 && (
+              <line
+                data-testid="drawing-rubber"
+                x1={drawing.points[drawing.points.length - 1]!.x}
+                y1={drawing.points[drawing.points.length - 1]!.y}
+                x2={snapTarget.x}
+                y2={snapTarget.y}
+                strokeDasharray="6 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {drawing.points.map((p, i) => (
+              <circle
+                key={i}
+                cx={p.x}
+                cy={p.y}
+                r={(i === 0 ? 4 : 3) / zoom}
+                fill="var(--accent)"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+            {drawing.points[0] && (
+              <circle
+                data-testid="drawing-first"
+                cx={drawing.points[0].x}
+                cy={drawing.points[0].y}
+                r={8 / zoom}
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {drawing.points[0] && drawing.points.length >= 3 && (
+              <circle
+                data-testid="drawing-close"
+                cx={drawing.points[0].x}
+                cy={drawing.points[0].y}
+                r={12 / zoom}
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+          </g>
+        )}
         {snapTarget && (
           <g data-testid="snap-mark" pointerEvents="none" stroke="var(--warn)" strokeWidth={2} fill="none">
             <circle

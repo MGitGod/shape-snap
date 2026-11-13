@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { Anchor, GridSettings, SceneNode } from "../core/types";
+import type { Anchor, GridSettings, PathNode, SceneNode } from "../core/types";
 import { toggleFillNone } from "../core/arrange";
-import { setAnchor, setNodeProp } from "../editor/actions";
+import { setAnchor, setNodeProp, toggleClosed } from "../editor/actions";
 import { runAction, type Viewport } from "../input/keyboard";
 import { KEYMAP, keyLabel, type ActionId } from "../input/keymap";
 import { ArrangePanel } from "./ArrangePanel";
@@ -51,6 +51,53 @@ function OpButtons({ getViewport }: { getViewport: () => Viewport }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function PathButtons({ node, getViewport }: { node: PathNode; getViewport: () => Viewport }) {
+  const held = useEditor((s) => s.heldHandle);
+  const kbd = (action: ActionId) => {
+    const b = KEYMAP.find((x) => x.action === action);
+    return b ? <kbd>{keyLabel(b.key)}</kbd> : null;
+  };
+  const run = (action: ActionId) => (e: { currentTarget: HTMLElement }) => {
+    runAction(action, getViewport());
+    e.currentTarget.blur();
+  };
+  const onVertex = held !== null && held.startsWith("vertex:");
+  const onEdge = held !== null && held.startsWith("edge:");
+  return (
+    <div className="op-row" data-testid="path-ops">
+      <button type="button" className="btn" data-path-action="smooth" onClick={run("smooth")}>
+        {node.smooth ? "直線に戻す" : "曲線にする"} {kbd("smooth")}
+      </button>
+      <button
+        type="button"
+        className="btn"
+        data-path-action="closed"
+        onClick={(e) => {
+          dispatch((s) => toggleClosed(s));
+          e.currentTarget.blur();
+        }}
+      >
+        {node.closed ? "開く" : "閉じる"}
+      </button>
+      {onEdge && (
+        <button type="button" className="btn" data-path-action="add-point" onClick={run("confirm")}>
+          点を足す {kbd("confirm")}
+        </button>
+      )}
+      {onVertex && node.smooth && (
+        <button type="button" className="btn" data-path-action="corner" onClick={run("corner-point")}>
+          {node.points[Number(held.slice(7))]?.corner ? "点を丸める" : "点を角にする"} {kbd("corner-point")}
+        </button>
+      )}
+      {onVertex && (
+        <button type="button" className="btn" data-path-action="delete-point" onClick={run("delete")}>
+          点を消す <kbd>Delete</kbd>
+        </button>
+      )}
     </div>
   );
 }
@@ -127,6 +174,7 @@ function PropsBody({ node, grid, getViewport }: { node: SceneNode; grid: GridSet
         onChange={(v) => apply("stroke", { style: { ...node.style, stroke: v } })}
       />
       <OpButtons getViewport={getViewport} />
+      {node.kind === "path" && <PathButtons node={node} getViewport={getViewport} />}
       {defs.map((def, i) => (
         <SliderField
           key={def.key}

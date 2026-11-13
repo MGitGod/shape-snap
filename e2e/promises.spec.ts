@@ -154,6 +154,17 @@ test("stage 1 walkthrough with clicks and single keys only", async ({ page }) =>
   s = await snap(page);
   expect(s.nodes).toHaveLength(count + 1);
 
+  // 9b. draw a line and turn it into a curve
+  await page.keyboard.press("l");
+  await clickAt(page, -200, 200);
+  await clickAt(page, -100, 260);
+  await clickAt(page, 0, 200);
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("s");
+  s = await snap(page);
+  expect(s.nodes).toHaveLength(count + 2);
+  expect(s.nodes[s.nodes.length - 1]?.kind).toBe("path");
+
   // 10. export SVG: the element count matches the number of shapes on screen
   await page.getByRole("button", { name: "書き出し", exact: true }).click();
   await page.getByRole("radio", { name: "SVG", exact: true }).check();
@@ -163,10 +174,10 @@ test("stage 1 walkthrough with clicks and single keys only", async ({ page }) =>
   ]);
   const bytes = await readStream((await download.createReadStream()) as unknown as AsyncIterable<Uint8Array> | null);
   const svg = new TextDecoder().decode(bytes);
-  const elements = svg.match(/<(?:rect|ellipse|polygon)\b/g) ?? [];
+  const elements = svg.match(/<(?:rect|ellipse|polygon|path)\b/g) ?? [];
   await expect(page.locator("[data-node-id]")).toHaveCount(s.nodes.length);
   expect(elements).toHaveLength(s.nodes.length);
-  expect(elements).toHaveLength(count + 1);
+  expect(elements).toHaveLength(count + 2);
 });
 
 for (const size of [{ width: 1280, height: 800 }, { width: 1024, height: 768 }]) {
