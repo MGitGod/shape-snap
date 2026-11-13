@@ -110,9 +110,10 @@ describe("polygon and corner handles", () => {
     expect(n.ry).toBeCloseTo(50);
     near(n.transform, 120, 110);
   });
-  it("toPath: ellipse and path give null, rect gives four points", () => {
-    expect(toPath(ellipse)).toBeNull();
+  it("toPath: path gives null, ellipse gives eight smooth points, rect gives four", () => {
     expect(toPath(toPath(rect())!)).toBeNull();
+    expect(toPath(ellipse)!.points).toHaveLength(8);
+    expect(toPath(ellipse)!.smooth).toBe(true);
     expect(toPath(rect())!.points).toHaveLength(4);
   });
   it("nudging an edge with snap lands on the next grid line", () => {
@@ -176,14 +177,14 @@ describe("moveHandle", () => {
 });
 
 describe("polygonToPath", () => {
-  it("keeps identity fields and builds a closed corner path", () => {
+  it("keeps identity fields and builds a closed straight path", () => {
     const p = polygonToPath(polygon)!;
     expect(p.kind).toBe("path");
     expect(p.closed).toBe(true);
     expect(p.smooth).toBe(false);
     expect(p.tension).toBe(0.5);
     expect(p.points).toHaveLength(4);
-    expect(p.points.every((q) => q.corner)).toBe(true);
+    expect(p.points.every((q) => !q.corner)).toBe(true);
     expect(p.locked).toBe(true);
     expect(p.role).toBe("subtract");
     expect(p.style).toEqual(style);

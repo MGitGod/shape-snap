@@ -1,3 +1,4 @@
+import { samplePath } from "./curve";
 import type { Anchor, Document, GridSettings, Point, SceneNode } from "./types";
 
 export interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
@@ -111,7 +112,7 @@ export function localOutline(node: SceneNode): Point[] {
       }));
     }
     case "path":
-      return node.points.map((p) => ({ x: p.x, y: p.y }));
+      return samplePath(node.points, node.closed, node.smooth, node.tension);
   }
 }
 
@@ -201,7 +202,8 @@ export function distanceToPolygonEdge(p: Point, polygon: Point[], closed: boolea
 export function hitTest(node: SceneNode, p: Point, tolerance: number): boolean {
   const outline = worldOutline(node);
   if (node.kind === "path" && !node.closed) {
-    return distanceToPolygonEdge(p, outline, false) <= Math.max(tolerance, node.style.strokeWidth / 2);
+    if (distanceToPolygonEdge(p, outline, false) <= Math.max(tolerance, node.style.strokeWidth / 2)) return true;
+    return node.style.fill !== null && pointInPolygon(p, outline);
   }
   if (pointInPolygon(p, outline)) return true;
   return distanceToPolygonEdge(p, outline, true) <= tolerance;

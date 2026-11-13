@@ -148,6 +148,10 @@ export function validateDocument(data: unknown): ValidateResult {
       const box = polygonBoxForRadius(raw.sides as number, raw.starRatio as number, radius as number);
       return { ...rest, width: box.width, height: box.height };
     }
+    if (raw.kind === "path" && raw.smooth === false) {
+      const pts = (raw.points as Rec[]).map((p) => ({ ...p, corner: false }));
+      return { ...raw, points: pts };
+    }
     return raw;
   });
   return { ok: true, doc: { ...doc, nodes: nodes as unknown as Document["nodes"] } };

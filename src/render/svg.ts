@@ -1,18 +1,14 @@
+import { pathData, round } from "../core/curve";
 import { localOutline, nodeBounds } from "../core/geometry";
 import type { Bounds } from "../core/geometry";
 import type { Document, SceneNode } from "../core/types";
 
-export interface SvgElementSpec { tag: "rect" | "ellipse" | "polygon"; attrs: Record<string, string | number> }
+export interface SvgElementSpec { tag: "rect" | "ellipse" | "polygon" | "path"; attrs: Record<string, string | number> }
 
 export interface ExportOptions {
   area: "content" | Bounds;
   margin: number;
   background: string | null;
-}
-
-function round(v: number): number {
-  const r = Math.round(v * 1000) / 1000;
-  return r === 0 ? 0 : r; // normalize -0
 }
 
 function transformAttr(node: SceneNode): string {
@@ -41,10 +37,17 @@ export function nodeToSvg(node: SceneNode): SvgElementSpec {
       attrs.ry = round(node.ry);
       break;
     case "polygon":
-    case "path":
-      // Stage 1: paths are closed straight-line shapes, so they render as polygons.
       tag = "polygon";
       attrs.points = localOutline(node).map((p) => `${round(p.x)},${round(p.y)}`).join(" ");
+      break;
+    case "path":
+      if (node.closed && !node.smooth) {
+        tag = "polygon";
+        attrs.points = localOutline(node).map((p) => `${round(p.x)},${round(p.y)}`).join(" ");
+      } else {
+        tag = "path";
+        attrs.d = pathData(node.points, node.closed, node.smooth, node.tension);
+      }
       break;
   }
   attrs.transform = transformAttr(node);
@@ -55,6 +58,10 @@ export function nodeToSvg(node: SceneNode): SvgElementSpec {
     attrs["stroke-width"] = round(strokeWidth);
   }
   if (opacity !== 1) attrs.opacity = round(opacity);
+  if (node.kind === "path" && !node.closed) {
+    attrs["stroke-linecap"] = "round";
+    attrs["stroke-linejoin"] = "round";
+  }
   return { tag, attrs };
 }
 

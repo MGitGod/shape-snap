@@ -137,12 +137,12 @@ describe("grid-true moves", () => {
     s = undoAction(s);
     expect(getNode(currentDoc(s), "a")!.kind).toBe("rect");
   });
-  it("convertToPath on an ellipse does nothing but explain", () => {
+  it("convertToPath turns an ellipse into a smooth eight-point path", () => {
     const e = createNode(createDocument(), "ellipse", { x: 100, y: 100 }, "e");
-    const before = stateWith([e], ["e"]);
-    const s = convertToPath(before);
-    expect(currentDoc(s)).toBe(currentDoc(before));
-    expect(s.notice).toContain("円");
+    const s = convertToPath(stateWith([e], ["e"]));
+    const n = getNode(currentDoc(s), "e")!;
+    expect(n.kind).toBe("path");
+    expect(n.kind === "path" && n.points).toHaveLength(8);
   });
 });
 

@@ -122,7 +122,7 @@ export function CanvasView() {
           const spec = nodeToSvg(n);
           const attrs: Record<string, string | number> = {};
           for (const [k, v] of Object.entries(spec.attrs)) {
-            attrs[k === "stroke-width" ? "strokeWidth" : k] = v;
+            attrs[k.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] = v;
           }
           if (solo && !selection.includes(n.id)) {
             const base = typeof attrs.opacity === "number" ? attrs.opacity : 1;

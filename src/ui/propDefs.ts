@@ -55,11 +55,13 @@ export function propDefsFor(node: SceneNode, grid: GridSettings): PropDef[] {
       );
       break;
     case "path":
+      if (node.smooth) defs.push(fieldDef("tension", "丸みの強さ", 0, 1, 0.05));
       break;
   }
+  const openPath = node.kind === "path" && !node.closed;
   defs.push(
     transformDef("rotation", "回転", 0, 359, 15),
-    styleDef("strokeWidth", "線の太さ", 0, 40, 1),
+    styleDef("strokeWidth", "線の太さ", openPath ? 1 : 0, 40, 1),
     styleDef("opacity", "不透明度", 0, 1, 0.05),
   );
   return defs;

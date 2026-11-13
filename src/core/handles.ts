@@ -1,5 +1,5 @@
 import { localOutline, rotateVector, snapValue, toLocal, toWorld } from "./geometry";
-import type { PathNode, Point, SceneNode } from "./types";
+import type { PathNode, PathPoint, Point, SceneNode } from "./types";
 
 export interface Handle {
   id: string;
@@ -33,9 +33,11 @@ function localHandles(node: SceneNode): LocalHandle[] {
       ...corners.map((pos, i) => ({ id: `corner:${i}`, kind: "corner" as const, index: i, pos, normal: ZERO })),
     ];
   }
-  const pts = localOutline(node);
+  const pts = node.kind === "path" ? node.points : localOutline(node);
   const n = pts.length;
   if (n === 0) return [];
+  const open = node.kind === "path" && !node.closed;
+  const showEdges = !(node.kind === "path" && node.smooth);
   let cx = 0;
   let cy = 0;
   for (const p of pts) { cx += p.x; cy += p.y; }
@@ -44,7 +46,7 @@ function localHandles(node: SceneNode): LocalHandle[] {
   for (let i = 0; i < n; i++) {
     const a = pts[i]!;
     out.push({ id: `vertex:${i}`, kind: "vertex", index: i, pos: { x: a.x, y: a.y }, normal: ZERO });
-    if (n < 2) continue;
+    if (n < 2 || !showEdges || (open && i === n - 1)) continue;
     const b = pts[(i + 1) % n]!;
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     const dx = b.x - a.x;
@@ -85,8 +87,8 @@ export function nextHandleId(node: SceneNode, current: string | null): string | 
 }
 
 export function toPath(node: SceneNode): PathNode | null {
-  if (node.kind !== "rect" && node.kind !== "polygon") return null;
-  return {
+  if (node.kind !== "rect" && node.kind !== "polygon" && node.kind !== "ellipse") return null;
+  const base = {
     id: node.id,
     name: node.name,
     visible: node.visible,
@@ -94,12 +96,27 @@ export function toPath(node: SceneNode): PathNode | null {
     role: node.role,
     transform: { ...node.transform },
     style: { ...node.style },
-    kind: "path",
-    points: localOutline(node).map((p) => ({ x: p.x, y: p.y, corner: true })),
+    kind: "path" as const,
     closed: true,
+  };
+  if (node.kind === "ellipse") {
+    const points: PathPoint[] = [];
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI / 4) * i;
+      points.push({ x: clean(node.rx * Math.cos(a)), y: clean(node.ry * Math.sin(a)), corner: false });
+    }
+    return { ...base, points, smooth: true, tension: 0.5 };
+  }
+  return {
+    ...base,
+    points: localOutline(node).map((p) => ({ x: p.x, y: p.y, corner: false })),
     smooth: false,
     tension: 0.5,
   };
+}
+
+function clean(v: number): number {
+  return Math.round(v * 1e12) / 1e12;
 }
 
 /** Old name for toPath. */

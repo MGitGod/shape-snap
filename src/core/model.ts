@@ -1,6 +1,7 @@
+import { toLocal } from "./geometry";
 import {
   GRID_MAX, GRID_MIN,
-  type Document, type GridSettings, type Guide, type NodeKind, type Point, type SceneNode, type Style,
+  type Document, type GridSettings, type Guide, type NodeKind, type PathNode, type Point, type SceneNode, type Style,
 } from "./types";
 
 export const DEFAULT_STYLE: Style = { fill: "#1d2330", stroke: null, strokeWidth: 2, opacity: 1 };
@@ -16,11 +17,11 @@ export function createDocument(): Document {
   return { version: 1, grid: { size: 20, visible: true, snap: true }, nodes: [] };
 }
 
-export function nextName(doc: Document, kind: NodeKind): string {
-  const prefix = NAME_PREFIX[kind];
+export function nextName(doc: Document, kind: NodeKind, base?: string): string {
+  const prefix = base ?? NAME_PREFIX[kind];
   let max = 0;
   for (const n of doc.nodes) {
-    if (n.kind !== kind) continue;
+    if (base === undefined && n.kind !== kind) continue;
     if (!n.name.startsWith(prefix + " ")) continue;
     const num = Number(n.name.slice(prefix.length + 1));
     if (Number.isInteger(num) && num > max) max = num;
@@ -142,4 +143,53 @@ export function removeGuide(doc: Document, id: string): Document {
 export function clearGuides(doc: Document): Document {
   if ((doc.guides ?? []).length === 0) return doc;
   return { ...doc, guides: [] };
+}
+
+export function createPathFromPoints(doc: Document, worldPoints: Point[], closed: boolean, id?: string): PathNode {
+  const xs = worldPoints.map((p) => p.x);
+  const ys = worldPoints.map((p) => p.y);
+  const cx = worldPoints.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
+  const cy = worldPoints.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : 0;
+  return {
+    id: id ?? crypto.randomUUID(),
+    name: closed ? nextName(doc, "path") : nextName(doc, "path", "線"),
+    visible: true,
+    locked: false,
+    role: "add",
+    transform: { x: cx, y: cy, rotation: 0 },
+    style: closed
+      ? { ...DEFAULT_STYLE, fill: DEFAULT_STYLE.fill, stroke: null }
+      : { ...DEFAULT_STYLE, fill: null, stroke: DEFAULT_STYLE.fill, strokeWidth: 4 },
+    kind: "path",
+    points: worldPoints.map((p) => ({ x: p.x - cx, y: p.y - cy, corner: false })),
+    closed,
+    smooth: false,
+    tension: 0.5,
+  };
+}
+
+export function insertPathPoint(node: PathNode, edgeIndex: number, world: Point): PathNode {
+  const l = toLocal(node, world);
+  const at = Math.min(Math.max(edgeIndex + 1, 0), node.points.length);
+  const points = node.points.map((p) => ({ ...p }));
+  points.splice(at, 0, { x: l.x, y: l.y, corner: false });
+  return { ...node, points, transform: { ...node.transform } };
+}
+
+export function removePathPoint(node: PathNode, index: number): PathNode {
+  const min = node.closed ? 3 : 2;
+  if (node.points.length <= min || index < 0 || index >= node.points.length) return node;
+  return {
+    ...node,
+    points: node.points.filter((_, i) => i !== index).map((p) => ({ ...p })),
+    transform: { ...node.transform },
+  };
+}
+
+export function setPathCorner(node: PathNode, index: number, corner: boolean): PathNode {
+  return {
+    ...node,
+    points: node.points.map((p, i) => (i === index ? { ...p, corner } : { ...p })),
+    transform: { ...node.transform },
+  };
 }
