@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shape Snap 設計書</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --panel: #ffffff; --ink: #1d2330; --sub: #5b6474; --line: #dcd8cf;
+    --accent: #2f6fde; --accent-soft: #e6eefc; --warn: #b4541a; --ok: #1f7a4d;
+    --grid: #c9c4b8; --key-bg: #f1eee7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171d; --panel: #1c2028; --ink: #e8eaf0; --sub: #9aa3b4; --line: #323845;
+      --accent: #7aa7ff; --accent-soft: #223252; --warn: #f0a268; --ok: #6fd3a0;
+      --grid: #3d4452; --key-bg: #262b36;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 40px 16px 96px; }
+  header.top { border-bottom: 2px solid var(--ink); padding-bottom: 20px; margin-bottom: 32px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; letter-spacing: .02em; }
+  .meta { color: var(--sub); font-size: .9rem; }
+  h2 { font-size: 1.35rem; margin: 56px 0 12px; padding-left: 12px; border-left: 5px solid var(--accent); }
+  h3 { font-size: 1.05rem; margin: 28px 0 8px; }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 1.4em; margin: 8px 0; }
+  li { margin: 3px 0; }
+  .lead { background: var(--accent-soft); border-radius: 10px; padding: 16px 20px; margin: 16px 0; }
+  .lead strong { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; background: var(--panel); font-size: .95rem; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--key-bg); font-weight: 600; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  kbd {
+    display: inline-block; min-width: 1.9em; text-align: center; padding: 1px 7px;
+    border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px;
+    background: var(--key-bg); font-family: Consolas, "Cascadia Mono", monospace; font-size: .9em;
+  }
+  code, pre { font-family: Consolas, "Cascadia Mono", monospace; font-size: .88rem; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; line-height: 1.55; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 12px 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h4 { margin: 0 0 6px; font-size: 1rem; }
+  .card p { margin: 0; font-size: .92rem; color: var(--sub); }
+  .stage { display: inline-block; font-size: .78rem; font-weight: 700; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: var(--bg); margin-right: 6px; }
+  .note { border-left: 4px solid var(--warn); padding: 6px 14px; margin: 12px 0; color: var(--sub); }
+  figure { margin: 16px 0; }
+  figcaption { color: var(--sub); font-size: .88rem; margin-top: 6px; }
+  svg text { font-family: inherit; }
+  nav.toc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 20px; }
+  nav.toc ol { columns: 2; column-gap: 32px; margin: 4px 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 600px) { nav.toc ol { columns: 1; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="top">
+  <h1>Shape Snap 設計書</h1>
+  <div class="meta">図形を組み合わせてロゴや複雑な図形を作る、クリックと単独キーだけの作図ツール ／ 2026-11-13 ／ 名前は仮</div>
+</header>
+
+<div class="lead">
+  <strong>このツールの約束</strong>
+  <ul>
+    <li>ドラッグを使わない。押しながら動かす操作は一つもない。</li>
+    <li>同時押しを使わない。Shift・Ctrl・Alt との組み合わせは一つもない。</li>
+    <li>ダブルクリックを使わない。時間に追われる操作は一つもない。</li>
+    <li>使う操作は、単独キー、カーソル移動、左クリック、右クリック、ホイール、矢印キーの連打だけ。</li>
+    <li>すべての位置はグリッドに吸着する。狙いが少しずれても、近いグリッド点に入る。</li>
+  </ul>
+</div>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#s1">目的と範囲</a></li>
+    <li><a href="#s2">画面の配置</a></li>
+    <li><a href="#s3">操作の基本</a></li>
+    <li><a href="#s4">キーの割り当て</a></li>
+    <li><a href="#s5">スライダーと数値入力</a></li>
+    <li><a href="#s6">線と曲線</a></li>
+    <li><a href="#s7">図形リスト</a></li>
+    <li><a href="#s8">連続配置・対称コピー・グループ</a></li>
+    <li><a href="#s9">結合と書き出し</a></li>
+    <li><a href="#s10">データの形</a></li>
+    <li><a href="#s11">プログラムの構成</a></li>
+    <li><a href="#s12">保存と失敗時の動き</a></li>
+    <li><a href="#s13">テスト</a></li>
+    <li><a href="#s14">実装の段階</a></li>
+    <li><a href="#s15">今回は作らないもの</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1">1. 目的と範囲</h2>
+<p>高機能な作図アプリは、同時押しとドラッグを前提にしている。指が不自由だとベジェ曲線が引けず、図形の変形も難しい。このツールは、簡単な図形をグリッドに置いて組み合わせることで、同じ結果に届くようにする。</p>
+<ul>
+  <li><strong>作るもの:</strong> ロゴ、アイコン、模様など、図形の組み合わせでできる絵。</li>
+  <li><strong>書き出し:</strong> SVG（主）と PNG。</li>
+  <li><strong>動かし方:</strong> まずブラウザで開くアプリとして作る。ネット接続は要らない。使い勝手が固まったら、同じ中身をデスクトップアプリに包む。</li>
+</ul>
+
+<h2 id="s2">2. 画面の配置</h2>
+<figure>
+<svg viewBox="0 0 920 520" role="img" aria-label="画面の配置図" style="width:100%;height:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px">
+  <defs>
+    <pattern id="g" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="13" cy="13" r="1.4" fill="var(--grid)"/>
+    </pattern>
+  </defs>
+  <!-- top bar -->
+  <rect x="0" y="0" width="920" height="48" fill="var(--key-bg)"/>
+  <text x="16" y="30" font-size="14" font-weight="700" fill="var(--ink)">道具</text>
+  <g font-size="12" fill="var(--ink)">
+    <rect x="62" y="10" width="78" height="28" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="72" y="29">R 四角</text>
+    <rect x="146" y="10" width="68" height="28" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="156" y="29">C 円</text>
+    <rect x="220" y="10" width="88" height="28" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="230" y="29">P 多角形</text>
+    <rect x="314" y="10" width="68" height="28" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="324" y="29">L 線</text>
+    <rect x="388" y="10" width="92" height="28" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="398" y="29">D 複製</text>
+    <rect x="486" y="10" width="92" height="28" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="496" y="29">A 連続配置</text>
+    <rect x="584" y="10" width="78" height="28" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="594" y="29">X 対称</text>
+    <rect x="750" y="10" width="76" height="28" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="760" y="29">Z 戻す</text>
+    <rect x="832" y="10" width="76" height="28" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="842" y="29">書き出し</text>
+  </g>
+  <!-- canvas -->
+  <rect x="0" y="48" width="640" height="424" fill="url(#g)"/>
+  <rect x="169" y="139" width="130" height="130" fill="none" stroke="var(--accent)" stroke-width="3"/>
+  <circle cx="377" cy="230" r="78" fill="none" stroke="var(--ink)" stroke-width="2"/>
+  <polyline points="117,373 169,321 221,373 273,321 325,373 377,321 429,373" fill="none" stroke="var(--ink)" stroke-width="2"/>
+  <g fill="var(--panel)" stroke="var(--accent)" stroke-width="2">
+    <rect x="162" y="132" width="14" height="14"/><rect x="292" y="132" width="14" height="14"/>
+    <rect x="162" y="262" width="14" height="14"/><rect x="292" y="262" width="14" height="14"/>
+    <rect x="227" y="132" width="14" height="14"/><rect x="227" y="262" width="14" height="14"/>
+    <rect x="162" y="197" width="14" height="14"/>
+  </g>
+  <rect x="292" y="197" width="14" height="14" fill="var(--accent)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="176" y="126" font-size="12" fill="var(--accent)">つまみ（塗りつぶし = つかんでいる）</text>
+  <circle cx="481" cy="113" r="9" fill="none" stroke="var(--warn)" stroke-width="2"/>
+  <text x="496" y="118" font-size="12" fill="var(--warn)">吸着先の点（カーソルの近く）</text>
+  <text x="16" y="72" font-size="12" fill="var(--sub)">キャンバス（グリッド）</text>
+  <!-- right panels -->
+  <rect x="640" y="48" width="280" height="424" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="656" y="74" font-size="13" font-weight="700" fill="var(--ink)">図形リスト</text>
+  <g font-size="12" fill="var(--ink)">
+    <rect x="652" y="84" width="256" height="26" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="662" y="102">▶ 四角 1　　　　　　足す　表示</text>
+    <rect x="652" y="114" width="256" height="26" rx="5" fill="none" stroke="var(--line)"/><text x="662" y="132">　 円 1　　　　　　　抜く　表示</text>
+    <rect x="652" y="144" width="256" height="26" rx="5" fill="none" stroke="var(--line)"/><text x="662" y="162">　 線 1　　　　　　　足す　ロック</text>
+  </g>
+  <line x1="640" y1="190" x2="920" y2="190" stroke="var(--line)"/>
+  <text x="656" y="214" font-size="13" font-weight="700" fill="var(--ink)">設定（選んだ図形）</text>
+  <g font-size="12" fill="var(--ink)">
+    <text x="656" y="242">幅</text><line x1="706" y1="238" x2="846" y2="238" stroke="var(--line)" stroke-width="4"/><circle cx="770" cy="238" r="7" fill="var(--accent)"/><rect x="856" y="226" width="52" height="24" rx="4" fill="none" stroke="var(--line)"/><text x="866" y="243">5</text>
+    <text x="656" y="276">高さ</text><line x1="706" y1="272" x2="846" y2="272" stroke="var(--line)" stroke-width="4"/><circle cx="770" cy="272" r="7" fill="var(--accent)"/><rect x="856" y="260" width="52" height="24" rx="4" fill="none" stroke="var(--line)"/><text x="866" y="277">5</text>
+    <text x="656" y="310">回転</text><line x1="706" y1="306" x2="846" y2="306" stroke="var(--line)" stroke-width="4"/><circle cx="706" cy="306" r="7" fill="var(--accent)"/><rect x="856" y="294" width="52" height="24" rx="4" fill="none" stroke="var(--line)"/><text x="866" y="311">0</text>
+    <text x="656" y="344">線の太さ</text><line x1="716" y1="340" x2="846" y2="340" stroke="var(--line)" stroke-width="4"/><circle cx="740" cy="340" r="7" fill="var(--accent)"/><rect x="856" y="328" width="52" height="24" rx="4" fill="none" stroke="var(--line)"/><text x="866" y="345">2</text>
+    <text x="656" y="378">色</text><rect x="706" y="364" width="22" height="22" rx="4" fill="var(--accent)"/><rect x="734" y="364" width="22" height="22" rx="4" fill="var(--ink)"/><rect x="762" y="364" width="22" height="22" rx="4" fill="var(--warn)"/><rect x="790" y="364" width="22" height="22" rx="4" fill="var(--ok)"/>
+  </g>
+  <line x1="640" y1="402" x2="920" y2="402" stroke="var(--line)"/>
+  <text x="656" y="426" font-size="13" font-weight="700" fill="var(--ink)">グリッド</text>
+  <text x="656" y="452" font-size="12" fill="var(--ink)">間隔</text><line x1="706" y1="448" x2="846" y2="448" stroke="var(--line)" stroke-width="4"/><circle cx="752" cy="448" r="7" fill="var(--accent)"/><rect x="856" y="436" width="52" height="24" rx="4" fill="none" stroke="var(--line)"/><text x="866" y="453" font-size="12" fill="var(--ink)">20</text>
+  <!-- bottom key hints -->
+  <rect x="0" y="472" width="920" height="48" fill="var(--key-bg)"/>
+  <text x="16" y="493" font-size="12" font-weight="700" fill="var(--ink)">今使えるキー</text>
+  <text x="16" y="511" font-size="12" fill="var(--sub)">クリック: 点を足す　Enter: 確定　右クリック: 一つ戻す　S: 曲線に変更　Esc: やめる</text>
+</svg>
+<figcaption>上: 道具の帯。右: 図形リスト、選んだ図形の設定、グリッドの設定。下: 今の状況で使えるキーの案内（状況に合わせて変わる）。</figcaption>
+</figure>
+<ul>
+  <li>道具の帯のボタンは、キーと同じ動きをする。キーでもクリックでも同じ結果になる。</li>
+  <li>ボタンと行は大きめに作る（高さ 40px 以上）。狙いやすさを優先する。</li>
+  <li>カーソルを乗せただけで出る表示（ホバー専用の操作）は使わない。</li>
+</ul>
+
+<h2 id="s3">3. 操作の基本</h2>
+<h3>図形を置く</h3>
+<ol>
+  <li><kbd>R</kbd> を押すと、カーソルに一番近いグリッド点に正方形が出る。カーソルがキャンバスの外なら中央に出る。</li>
+  <li>出た図形は選ばれた状態になる。すぐに設定のスライダーや矢印キーで直せる。</li>
+</ol>
+<h3>図形を選ぶ</h3>
+<ul>
+  <li>図形をクリックする。</li>
+  <li>重なっている場所は、同じ位置をもう一度クリックすると下の図形に移る。間を空けてよい（速さは問わない）。</li>
+  <li><kbd>Q</kbd> で前の図形、<kbd>E</kbd> で次の図形に移る。カーソルを使わない。</li>
+  <li>右クリックか <kbd>Esc</kbd> で選択を外す。</li>
+</ul>
+<h3>図形を動かす</h3>
+<ul>
+  <li><strong>クリックで動かす:</strong> 図形を選び、何もないグリッド点をクリックすると、図形の基準点がそこへ移る。</li>
+  <li><strong>カーソルの位置へ動かす:</strong> <kbd>Space</kbd> を押すと、カーソルに一番近いグリッド点へ移る。行き先に別の図形があっても動かせる。</li>
+  <li><strong>矢印キーで動かす:</strong> 1 回押すと 1 グリッド動く。</li>
+  <li>基準点は「中心」と「四隅」から選べる。初期値は中心。</li>
+</ul>
+<h3>図形を変形する（つまみ）</h3>
+<p>図形を選ぶと、頂点と辺の真ん中に四角いつまみが出る。つまみは引っ張らない。クリック 2 回で動かす。</p>
+<ol>
+  <li>つまみをクリックすると、そのつまみを「つかんだ」状態になる（色が変わる）。</li>
+  <li>行き先のグリッド点をクリックすると、つまみがそこへ動く。</li>
+  <li>右クリックか <kbd>Esc</kbd> で、つかむのをやめる。</li>
+</ol>
+<ul>
+  <li>つかんでいる間は、矢印キーでも 1 グリッドずつ動かせる。</li>
+  <li>図形を選んでいる間、<kbd>W</kbd> で次のつまみをつかむ。小さなつまみをカーソルで狙わなくてよい。</li>
+  <li>つまみは大きめに作る（画面上で 14px 以上、クリックが効く範囲は 24px 以上）。拡大縮小しても大きさは変わらない。</li>
+  <li>幅・高さ・回転は、設定のスライダーか数値でも変えられる。</li>
+</ul>
+<div class="scroll">
+<table>
+  <tr><th>図形</th><th>辺の真ん中のつまみ <span class="stage">1</span></th><th>頂点のつまみ <span class="stage">2</span></th></tr>
+  <tr><td>四角</td><td>その辺が平行に動く（正方形が長方形になる）</td><td>その角だけが動く（突き出した形になる）</td></tr>
+  <tr><td>多角形（三角形など）</td><td>その辺が平行に動く</td><td>その角だけが動く</td></tr>
+  <tr><td>円</td><td>上下左右の 4 つ。動かすと楕円になる</td><td>なし。「点に変える」で 8 個の点を通る曲線に変えると、点を動かせる</td></tr>
+  <tr><td>線</td><td>なし</td><td>その点だけが動く</td></tr>
+</table>
+</div>
+<ul>
+  <li>辺のつまみは、辺に垂直な向きにだけ動く。行き先のクリックが斜めにずれても、垂直な向きの分だけを使う。回転した図形でも同じ。</li>
+  <li>辺のつまみだけを使っている間、四角は四角のまま、円は楕円のまま。幅や高さのスライダーも連動する。</li>
+  <li>頂点のつまみを動かすと、図形は「自由な形」（線で囲んだ形）に変わる。幅・高さ・角の丸みのスライダーは使えなくなる。変わる前に、キーの案内に一言出す。<kbd>Z</kbd> で戻せる。</li>
+</ul>
+<h3>移動と変形の分け方</h3>
+<p>「つまみをつかんでいるかどうか」だけで分かれる。モードの切り替えはない。</p>
+<div class="scroll">
+<table>
+  <tr><th>操作</th><th>つまみをつかんでいない</th><th>つまみをつかんでいる</th></tr>
+  <tr><td>グリッド点をクリック</td><td>移動（図形全体）</td><td>変形（つまみだけ）</td></tr>
+  <tr><td>矢印キー</td><td>移動</td><td>変形</td></tr>
+  <tr><td><kbd>Space</kbd></td><td>移動（カーソルの位置へ）</td><td>変形（つまみをカーソルの位置へ）</td></tr>
+  <tr><td>右クリック ／ <kbd>Esc</kbd></td><td>選択を外す</td><td>つかむのをやめる（図形は選んだまま）</td></tr>
+</table>
+</div>
+<h3>キャンバスを見る</h3>
+<ul>
+  <li>ホイールで拡大縮小する。カーソルの位置を中心に拡大する。</li>
+  <li>何も選んでいないとき、矢印キーで表示位置が動く。</li>
+  <li><kbd>0</kbd> で全体が収まる表示に戻る。</li>
+</ul>
+
+<h2 id="s4">4. キーの割り当て</h2>
+<p>すべて単独キー。押して離すだけで働く。割り当ては設定画面で変えられる。</p>
+<div class="scroll">
+<table>
+  <tr><th>分類</th><th>キー</th><th>動き</th><th>段階</th></tr>
+  <tr><td rowspan="4">置く</td><td><kbd>R</kbd></td><td>四角を置く</td><td>1</td></tr>
+  <tr><td><kbd>C</kbd></td><td>円を置く</td><td>1</td></tr>
+  <tr><td><kbd>P</kbd></td><td>多角形を置く（辺の数はスライダー）</td><td>1</td></tr>
+  <tr><td><kbd>L</kbd></td><td>線を引く（クリックで点を足す）</td><td>2</td></tr>
+  <tr><td rowspan="6">選ぶ</td><td><kbd>Q</kbd> <kbd>E</kbd></td><td>前の図形 ／ 次の図形</td><td>1</td></tr>
+  <tr><td><kbd>W</kbd></td><td>次のつまみをつかむ</td><td>1</td></tr>
+  <tr><td><kbd>M</kbd></td><td>複数選択の入り切り。入っている間はクリックで足し引きする</td><td>1</td></tr>
+  <tr><td><kbd>Esc</kbd> ／ 右クリック</td><td>つかむのをやめる。つかんでいなければ選択を外す。作図中は一つ戻す</td><td>1</td></tr>
+  <tr><td><kbd>Tab</kbd></td><td>操作の場所を移す（キャンバス → 図形リスト → 設定）</td><td>1</td></tr>
+  <tr><td><kbd>Enter</kbd></td><td>確定する</td><td>1</td></tr>
+  <tr><td rowspan="3">動かす</td><td>矢印キー</td><td>1 グリッド動かす（つまみをつかんでいれば、つまみを動かす）</td><td>1</td></tr>
+  <tr><td><kbd>Space</kbd></td><td>カーソルの位置へ動かす（同上）</td><td>1</td></tr>
+  <tr><td><kbd>F</kbd> <kbd>B</kbd></td><td>一つ手前へ ／ 一つ奥へ</td><td>1</td></tr>
+  <tr><td rowspan="4">編集</td><td><kbd>D</kbd></td><td>複製する（1 グリッドずらして置く）</td><td>1</td></tr>
+  <tr><td><kbd>Delete</kbd> ／ <kbd>Backspace</kbd></td><td>消す</td><td>1</td></tr>
+  <tr><td><kbd>Z</kbd> <kbd>Y</kbd></td><td>取り消す ／ やり直す（回数の制限なし）</td><td>1</td></tr>
+  <tr><td><kbd>S</kbd></td><td>線を曲線に変える ／ 直線に戻す</td><td>2</td></tr>
+  <tr><td rowspan="3">表示</td><td><kbd>H</kbd></td><td>隠す ／ 出す</td><td>1</td></tr>
+  <tr><td><kbd>K</kbd></td><td>ロックする ／ 外す</td><td>1</td></tr>
+  <tr><td><kbd>O</kbd></td><td>ソロ表示（選んだ図形以外を薄くして触れなくする）</td><td>1</td></tr>
+  <tr><td rowspan="4">まとめる</td><td><kbd>G</kbd> <kbd>U</kbd></td><td>グループにする ／ 解く</td><td>3</td></tr>
+  <tr><td><kbd>A</kbd></td><td>連続配置にする</td><td>3</td></tr>
+  <tr><td><kbd>X</kbd></td><td>対称コピーにする</td><td>3</td></tr>
+  <tr><td><kbd>T</kbd></td><td>役割を切り替える（足す ／ 抜く）</td><td>4</td></tr>
+  <tr><td rowspan="3">見る</td><td>ホイール</td><td>拡大縮小</td><td>1</td></tr>
+  <tr><td><kbd>0</kbd></td><td>全体表示</td><td>1</td></tr>
+  <tr><td><kbd>1</kbd> <kbd>2</kbd></td><td>グリッドを細かく ／ 粗く</td><td>1</td></tr>
+</table>
+</div>
+<div class="note">キーを押し続けたときの自動連打は、矢印キーとスライダーの増減だけに効かせる。ほかのキーは、押し続けても 1 回だけ働く（意図しない連続実行を防ぐ）。</div>
+
+<h2 id="s5">5. スライダーと数値入力</h2>
+<p>すべての値に、スライダーと数値の欄を並べて置く。どちらで変えても同じ結果になる。</p>
+<ul>
+  <li><strong>クリック:</strong> スライダーの上の好きな位置をクリックすると、つまみがそこへ飛ぶ（つまみを引っ張らなくてよい）。</li>
+  <li><strong>ホイール:</strong> カーソルをスライダーに乗せてホイールを回すと増減する。</li>
+  <li><strong>キー:</strong> <kbd>Tab</kbd> で設定に移り、<kbd>↑</kbd> <kbd>↓</kbd> で項目を選び、<kbd>←</kbd> <kbd>→</kbd> で増減する。数字を打つと数値入力になり、<kbd>Enter</kbd> で確定する。</li>
+  <li><strong>単位:</strong> 大きさと位置は「グリッド何個分」で表す。細かい調整用に、刻みを 1 ／ 0.5 ／ 0.25 から選べる。</li>
+</ul>
+<div class="scroll">
+<table>
+  <tr><th>対象</th><th>変えられる値</th></tr>
+  <tr><td>四角</td><td>幅、高さ、角の丸み、回転</td></tr>
+  <tr><td>円</td><td>横の半径、縦の半径、回転、「点に変える」ボタン（段階 2）</td></tr>
+  <tr><td>多角形</td><td>辺の数、半径、星形にする割合、回転</td></tr>
+  <tr><td>線</td><td>丸みの強さ、閉じる ／ 開く</td></tr>
+  <tr><td>共通</td><td>位置（横・縦）、塗りの色、線の色、線の太さ、不透明度</td></tr>
+  <tr><td>グリッド</td><td>間隔、表示の入り切り、吸着の入り切り、刻み</td></tr>
+</table>
+</div>
+<p>色は、よく使う色の見本を並べてクリックで選ぶ。色コード（#2f6fde など）の入力と、色相・彩度・明るさのスライダーも用意する。</p>
+
+<h2 id="s6">6. 線と曲線</h2>
+<h3>線を引く</h3>
+<ol>
+  <li><kbd>L</kbd> を押す。</li>
+  <li>グリッド点を順にクリックする。クリックするたびに線が伸びる。</li>
+  <li>間違えたら右クリックで一つ戻す。</li>
+  <li><kbd>Enter</kbd> で確定する。最初の点をクリックすると、閉じた形として確定する。</li>
+</ol>
+<h3>曲線に変える</h3>
+<figure>
+<svg viewBox="0 0 920 170" role="img" aria-label="ジグザグが波になる図" style="width:100%;height:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px">
+  <text x="20" y="26" font-size="13" fill="var(--sub)">クリックで引いたジグザグ</text>
+  <polyline points="30,120 80,60 130,120 180,60 230,120 280,60 330,120 380,60" fill="none" stroke="var(--ink)" stroke-width="2.5"/>
+  <g fill="var(--accent)"><circle cx="30" cy="120" r="4"/><circle cx="80" cy="60" r="4"/><circle cx="130" cy="120" r="4"/><circle cx="180" cy="60" r="4"/><circle cx="230" cy="120" r="4"/><circle cx="280" cy="60" r="4"/><circle cx="330" cy="120" r="4"/><circle cx="380" cy="60" r="4"/></g>
+  <text x="430" y="96" font-size="22" fill="var(--accent)">S →</text>
+  <text x="520" y="26" font-size="13" fill="var(--sub)">同じ点を通る波</text>
+  <path d="M530,120 C547,100 563,60 580,60 C597,60 613,120 630,120 C647,120 663,60 680,60 C697,60 713,120 730,120 C747,120 763,60 780,60 C797,60 813,120 830,120 C847,120 863,80 880,60" fill="none" stroke="var(--ink)" stroke-width="2.5"/>
+  <g fill="var(--accent)"><circle cx="530" cy="120" r="4"/><circle cx="580" cy="60" r="4"/><circle cx="630" cy="120" r="4"/><circle cx="680" cy="60" r="4"/><circle cx="730" cy="120" r="4"/><circle cx="780" cy="60" r="4"/><circle cx="830" cy="120" r="4"/><circle cx="880" cy="60" r="4"/></g>
+</svg>
+<figcaption>点の位置はそのまま。曲線はすべての点を通る。</figcaption>
+</figure>
+<ul>
+  <li><kbd>S</kbd> か「曲線に変更」ボタンで、線全体が滑らかになる。もう一度押すと直線に戻る。</li>
+  <li>「丸みの強さ」スライダーで、ゆるい波からきつい波まで変えられる。</li>
+  <li>点のつまみをつかんで「この点は角のまま」を入れると、そこだけ尖らせられる。</li>
+  <li>曲線にしたあとも、点を動かせば曲線がついてくる。ベジェ曲線のハンドルは出さない。</li>
+  <li>計算は、点を通る曲線（Catmull-Rom）を SVG の三次ベジェ曲線に直して描く。</li>
+</ul>
+
+<h2 id="s7">7. 図形リスト</h2>
+<p>図形が増えると、重なった図形をカーソルで狙うのが難しくなる。そこで、全図形を右側に一覧する。</p>
+<ul>
+  <li>一行が一つの図形。上にあるほど手前に描かれる。</li>
+  <li>行をクリックするか、<kbd>Q</kbd> <kbd>E</kbd> で選ぶ。選ぶとキャンバス上でも強調される。</li>
+  <li>各行に「表示」「ロック」「役割（足す ／ 抜く）」の切り替えがある。キーは <kbd>H</kbd> <kbd>K</kbd> <kbd>T</kbd>。</li>
+  <li>ロックした図形はクリックに反応しない。下絵や、置き終えた図形の誤操作を防ぐ。</li>
+  <li>ソロ表示（<kbd>O</kbd>）は、選んだ図形以外を薄くして触れなくする。もう一度押すと戻る。</li>
+  <li>名前は自動で付く（四角 1、円 2）。変えたいときだけ変える。</li>
+  <li>グループ、連続配置、対称コピーは、中身を畳める親の行になる。</li>
+</ul>
+
+<h2 id="s8">8. 連続配置・対称コピー・グループ</h2>
+<div class="cards">
+  <div class="card">
+    <h4><span class="stage">3</span>連続配置</h4>
+    <p>図形を選んで <kbd>A</kbd>。同じ図形が並ぶ。個数、横の間隔、縦の間隔、一つごとの拡大率、一つごとの回転をスライダーで変える。</p>
+  </div>
+  <div class="card">
+    <h4><span class="stage">3</span>対称コピー</h4>
+    <p>図形を選んで <kbd>X</kbd>。左右、上下、回転（何回対称か）から選ぶ。軸の位置はグリッド点のクリックで決める。</p>
+  </div>
+  <div class="card">
+    <h4><span class="stage">3</span>グループ</h4>
+    <p>複数選んで <kbd>G</kbd>。まとめて動かせる。必須ではない。必要なときだけ使う。</p>
+  </div>
+</div>
+<ul>
+  <li><strong>例:</strong> 正方形を置く → <kbd>A</kbd> → 個数 5、横の間隔 3、拡大率 0.85。左から右へ、だんだん小さくなる正方形が 5 個並ぶ。</li>
+  <li>連続配置と対称コピーは「元の図形 + 複製の規則」として持つ。元の図形を直すと、複製も全部変わる。個数や間隔はあとからいつでも変えられる。</li>
+  <li>一つずつ別々に直したくなったら、「ばらす」で独立した図形に変える。</li>
+  <li>連続配置の上に対称コピーを重ねられる（例: 並べた正方形を 6 回対称にして輪にする）。</li>
+</ul>
+
+<h2 id="s9">9. 結合と書き出し</h2>
+<h3>足す・抜くの役割</h3>
+<figure>
+<svg viewBox="0 0 920 180" role="img" aria-label="足すと抜くの図" style="width:100%;height:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px">
+  <text x="20" y="26" font-size="13" fill="var(--sub)">置いた図形（青: 足す、橙: 抜く）</text>
+  <circle cx="130" cy="105" r="55" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <rect x="150" y="60" width="110" height="90" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2" fill-opacity=".8"/>
+  <circle cx="205" cy="105" r="26" fill="none" stroke="var(--warn)" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="400" y="112" font-size="22" fill="var(--accent)">結合 →</text>
+  <text x="560" y="26" font-size="13" fill="var(--sub)">書き出される一つの輪郭</text>
+  <path fill-rule="evenodd" fill="var(--ink)" d="M690,60 L800,60 L800,150 L690,150 L690,156.2 A55,55 0 1 1 690,53.8 Z M745,79 A26,26 0 1 0 745,131 A26,26 0 1 0 745,79 Z"/>
+</svg>
+<figcaption>足す図形を全部合体し、抜く図形でくり抜く。</figcaption>
+</figure>
+<ul>
+  <li>図形は置いた時点では「足す」。<kbd>T</kbd> で「抜く」に切り替える。抜く図形は点線で表示する。</li>
+  <li>「結合を表示」を入れると、合体後の輪郭をその場で確かめられる。元の図形は残るので、位置や大きさを直すと輪郭もすぐ変わる。</li>
+  <li>結合は、グループごとにも、全体にもかけられる。色が違う部分は別のグループにして、それぞれ結合する。</li>
+  <li>線（閉じていない線）は、太さを持った帯の形に直してから結合する。</li>
+  <li>結合の計算には Paper.js の図形演算を使う。自前では作らない。</li>
+</ul>
+<h3>書き出し</h3>
+<div class="scroll">
+<table>
+  <tr><th>形式</th><th>中身</th><th>使いどころ</th></tr>
+  <tr><td>SVG（結合する）</td><td>結合した輪郭だけ。グリッドは入らない</td><td>ロゴとして使う</td></tr>
+  <tr><td>SVG（結合しない）</td><td>図形を置いたまま</td><td>ほかの作図アプリで続きを直す</td></tr>
+  <tr><td>PNG</td><td>大きさを選べる（512、1024、2048、数値入力）。背景は透明か色</td><td>画像として使う</td></tr>
+  <tr><td>作業ファイル（.json）</td><td>図形、グリッド、複製の規則をすべて含む</td><td>あとで続きを作る、別のパソコンへ移す</td></tr>
+</table>
+</div>
+<p>書き出す範囲は、図形全体がちょうど収まる枠か、キャンバス全体から選ぶ。余白はスライダーで変える。</p>
+
+<h2 id="s10">10. データの形</h2>
+<p>画面とは別に、絵の中身を一つのデータとして持つ。段階 3 と 4 の機能が入る場所は、段階 1 から用意しておく。</p>
+<pre>Document
+  version        データの版（古い作業ファイルを読むために使う）
+  grid           { size, subdivision, visible, snap }
+  nodes[]        並び順 = 重なり順
+
+Node（共通）
+  id, name, visible, locked
+  role           "add" | "subtract"      ← 段階 4 で使う。段階 1 から持つ
+  transform      { x, y, rotation, scaleX, scaleY }   位置はグリッド単位
+
+Node の種類
+  rect           { width, height, cornerRadius }
+  ellipse        { rx, ry }
+  polygon        { sides, radius, starRatio }
+  path           { points[{x, y, corner}], closed, smooth, tension }
+  group          { children[] }                               ← 段階 3
+  repeat         { child, count, dx, dy, scaleStep, rotateStep }   ← 段階 3
+  mirror         { child, mode, axis, count }                 ← 段階 3
+
+style（図形ごと）
+  fill, stroke, strokeWidth, opacity</pre>
+<ul>
+  <li>位置と大きさは、ピクセルではなくグリッド単位で持つ。グリッドの間隔を変えても、図形同士の関係は崩れない。</li>
+  <li>連続配置と対称コピーの複製は、データには持たない。描くときに規則から作る。</li>
+  <li>つまみはデータには持たない。図形の種類と値から、描くときに位置を計算する。辺のつまみは幅・高さ・半径と位置を書き換える。頂点のつまみは、rect・polygon を path に変えてから点を動かす。円の「点に変える」は、ellipse を 8 点の滑らかな path に変える。</li>
+  <li>すべての変更は「命令」（図形を足す、動かす、値を変えるなど）として記録する。取り消しとやり直しは、この記録をたどる。</li>
+</ul>
+
+<h2 id="s11">11. プログラムの構成</h2>
+<p>使う技術: TypeScript、Vite、React、Vitest（単体テスト）、Playwright（画面のテスト）。結合の計算だけ Paper.js。</p>
+<div class="scroll">
+<table>
+  <tr><th>部分</th><th>役割</th><th>頼る相手</th></tr>
+  <tr><td><code>core/model</code></td><td>データの形と、その検査</td><td>なし</td></tr>
+  <tr><td><code>core/commands</code></td><td>命令の実行、取り消し、やり直し</td><td>model</td></tr>
+  <tr><td><code>core/geometry</code></td><td>吸着、当たり判定、つまみの位置と動かし方、曲線化、複製の展開、外枠の計算</td><td>model</td></tr>
+  <tr><td><code>core/boolean</code></td><td>結合とくり抜き（段階 4）</td><td>geometry、Paper.js</td></tr>
+  <tr><td><code>input</code></td><td>キーとマウスの入力を命令に直す。今の状態（選択、つまみをつかんでいる、線を引いているなど）を持つ</td><td>commands</td></tr>
+  <tr><td><code>render</code></td><td>データを SVG として描く。選択の強調、吸着先の印もここ</td><td>geometry</td></tr>
+  <tr><td><code>ui</code></td><td>道具の帯、図形リスト、設定、キーの案内</td><td>input、commands</td></tr>
+  <tr><td><code>io</code></td><td>自動保存、作業ファイルの読み書き、SVG・PNG の書き出し</td><td>model、render</td></tr>
+</table>
+</div>
+<ul>
+  <li><code>core</code> は画面を知らない。計算だけなので、自動テストで確かめやすい。</li>
+  <li>画面に描く SVG と、書き出す SVG は、同じ <code>render</code> の関数から作る。画面と書き出しがずれない。</li>
+  <li>キーの割り当ては一つの表（keymap）にまとめる。画面下のキーの案内も、設定画面の割り当て変更も、同じ表から作る。</li>
+  <li>デスクトップアプリにするときは、この中身を Tauri で包む。変わるのは <code>io</code>（ファイルの保存先）だけ。</li>
+</ul>
+
+<h2 id="s12">12. 保存と失敗時の動き</h2>
+<ul>
+  <li><strong>自動保存:</strong> 操作のたびに、ブラウザの中（IndexedDB）へ保存する。保存の操作は要らない。次に開くと続きから始まる。</li>
+  <li><strong>作品の一覧:</strong> 複数の作品を持てる。開始画面で選ぶ。</li>
+  <li><strong>控え:</strong> ブラウザのデータを消すと作品も消える。そのため、作業ファイル（.json）の書き出しを目立つ場所に置く。</li>
+  <li><strong>保存に失敗したとき:</strong> 画面の上に帯で知らせ、作業ファイルの書き出しを勧める。作業は止めない。</li>
+  <li><strong>数値がおかしいとき:</strong> 範囲の外や数字でない入力は、元の値に戻し、欄を赤くして知らせる。</li>
+  <li><strong>作業ファイルが壊れているとき:</strong> 読み込まず、どこがおかしいかを表示する。今の作品は上書きしない。</li>
+  <li><strong>結合に失敗したとき:</strong> 結合の表示だけを外し、原因の図形をリストで示す。図形のデータは変えない。</li>
+</ul>
+
+<h2 id="s13">13. テスト</h2>
+<ul>
+  <li><strong>単体テスト（core）:</strong> 吸着、当たり判定、つまみの動き（回転した図形を含む）、曲線化、複製の展開、命令の取り消しとやり直し、データの検査。</li>
+  <li><strong>画面のテスト:</strong> 「R を押す → 点をクリック → 書き出した SVG に四角がその位置にある」のように、キーとクリックだけで通す。ドラッグと同時押しを一度も使わずに全機能が使えることを、テストで保証する。</li>
+  <li><strong>書き出しの検査:</strong> 書き出した SVG を読み直し、画面と同じ形になっているかを比べる。</li>
+  <li><strong>各段階の終わり:</strong> 実際に使ってもらい、使いにくい点を直してから次の段階へ進む。</li>
+</ul>
+
+<h2 id="s14">14. 実装の段階</h2>
+<div class="scroll">
+<table>
+  <tr><th>段階</th><th>入れるもの</th><th>終わったら試せること</th></tr>
+  <tr><td><span class="stage">1</span>土台</td><td>グリッドと吸着、四角・円・多角形、選択、クリック移動と矢印キー移動、辺の真ん中のつまみ（四角・円・多角形）、スライダーと数値入力、図形リスト（表示・ロック・ソロ）、重なり順、複製、取り消しとやり直し、自動保存、SVG・PNG・作業ファイルの書き出し、キーの案内</td><td>図形を並べて書き出す</td></tr>
+  <tr><td><span class="stage">2</span>線</td><td>線を引く、曲線に変える、丸みの強さ、頂点のつまみ（自由な形への変換）、円を点に変える、角のまま残す点</td><td>ジグザグから波模様を作る。四角の角を一つ突き出す</td></tr>
+  <tr><td><span class="stage">3</span>まとめる</td><td>連続配置、対称コピー、グループ、ばらす</td><td>だんだん小さくなる正方形を 5 個並べる</td></tr>
+  <tr><td><span class="stage">4</span>結合</td><td>足す・抜くの役割、結合の表示、結合した SVG の書き出し</td><td>一つの輪郭のロゴとして書き出す</td></tr>
+  <tr><td><span class="stage">5</span>包む</td><td>デスクトップアプリ化、キーの割り当て変更の画面</td><td>アプリとして起動する</td></tr>
+</table>
+</div>
+
+<h2 id="s15">15. 今回は作らないもの</h2>
+<ul>
+  <li>文字（テキスト）の入力と、フォントの扱い。</li>
+  <li>写真や画像の読み込み（下絵としての読み込みは、あとで足す候補）。</li>
+  <li>グラデーション、影、ぼかし。</li>
+  <li>ベジェ曲線のハンドルを直接動かす操作。</li>
+  <li>複数人での同時編集、ネット上への保存。</li>
+</ul>
+
+</main>
+</body>
+</html>
