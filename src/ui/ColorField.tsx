@@ -41,6 +41,17 @@ export function ColorField({ kind, label, value, onChange }: ColorFieldProps) {
     <div className="color-field" data-color-field={kind}>
       <div className="color-title">{label}</div>
       <div className="swatches">
+        <button
+          type="button"
+          className={`btn none-swatch${value === null ? " on" : ""}`}
+          data-color="none"
+          onClick={(e) => {
+            onChange(null);
+            e.currentTarget.blur();
+          }}
+        >
+          なし
+        </button>
         {SWATCHES.map((c) => (
           <button
             key={c}
@@ -57,17 +68,6 @@ export function ColorField({ kind, label, value, onChange }: ColorFieldProps) {
         ))}
       </div>
       <div className="color-row">
-        <button
-          type="button"
-          className={`btn${value === null ? " on" : ""}`}
-          data-color="none"
-          onClick={(e) => {
-            onChange(null);
-            e.currentTarget.blur();
-          }}
-        >
-          なし
-        </button>
         <input
           type="text"
           className="hex-input"

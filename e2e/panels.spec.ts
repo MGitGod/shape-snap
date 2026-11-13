@@ -140,6 +140,7 @@ test("three slider changes undo together with one z", async ({ page }) => {
   await page.locator('[data-action="place-rect"]').click();
   const start = (await snap(page)).nodes[0]?.width;
   const row = page.locator('[data-prop="width"]');
+  await row.scrollIntoViewIfNeeded();
   const box = await row.boundingBox();
   if (!box) throw new Error("row not found");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

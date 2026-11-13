@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { Anchor, GridSettings, SceneNode } from "../core/types";
+import { toggleFillNone } from "../core/arrange";
 import { setAnchor, setNodeProp } from "../editor/actions";
+import { runAction, type Viewport } from "../input/keyboard";
+import { KEYMAP, keyLabel, type ActionId } from "../input/keymap";
+import { ArrangePanel } from "./ArrangePanel";
 import { currentDoc } from "../editor/state";
 import { dispatch, editorStore, useEditor } from "../editor/store";
 import { ColorField } from "./ColorField";
@@ -8,12 +12,48 @@ import { clampToDef, propDefsFor } from "./propDefs";
 import { SliderField } from "./SliderField";
 
 const ANCHORS: Array<{ id: Anchor; label: string }> = [
+  { id: "auto", label: "自動" },
   { id: "center", label: "中心" },
   { id: "tl", label: "左上" },
   { id: "tr", label: "右上" },
   { id: "bl", label: "左下" },
   { id: "br", label: "右下" },
 ];
+
+const OPS: Array<{ action: ActionId; label: string }> = [
+  { action: "scale-down", label: "縮小" },
+  { action: "scale-up", label: "拡大" },
+  { action: "rotate-mode", label: "回転" },
+  { action: "fill-none", label: "塗りなし" },
+  { action: "to-path", label: "自由な形に変える" },
+];
+
+function OpButtons({ getViewport }: { getViewport: () => Viewport }) {
+  const rotating = useEditor((s) => s.rotateMode);
+  return (
+    <div className="op-row" data-testid="shape-ops">
+      {OPS.map((op) => {
+        const binding = KEYMAP.find((b) => b.action === op.action);
+        const pressed = op.action === "rotate-mode" ? rotating : undefined;
+        return (
+          <button
+            key={op.action}
+            type="button"
+            className={`btn${pressed ? " on" : ""}`}
+            data-op={op.action}
+            aria-pressed={pressed}
+            onClick={(e) => {
+              runAction(op.action, getViewport());
+              e.currentTarget.blur();
+            }}
+          >
+            {op.label} {binding ? <kbd>{keyLabel(binding.key)}</kbd> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function isTextField(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -24,7 +64,7 @@ function tidy(v: number): number {
   return Number(v.toFixed(4));
 }
 
-function PropsBody({ node, grid }: { node: SceneNode; grid: GridSettings }) {
+function PropsBody({ node, grid, getViewport }: { node: SceneNode; grid: GridSettings; getViewport: () => Viewport }) {
   const anchor = useEditor((s) => s.anchor);
   const focusArea = useEditor((s) => s.focusArea);
   const [active, setActive] = useState(0);
@@ -73,6 +113,20 @@ function PropsBody({ node, grid }: { node: SceneNode; grid: GridSettings }) {
 
   return (
     <div ref={rootRef}>
+      <ColorField
+        kind="fill"
+        label="塗りの色"
+        value={node.style.fill}
+        onChange={(v) =>
+          apply("fill", { style: v === null ? toggleFillNone(node).style : { ...node.style, fill: v } })}
+      />
+      <ColorField
+        kind="stroke"
+        label="線の色"
+        value={node.style.stroke}
+        onChange={(v) => apply("stroke", { style: { ...node.style, stroke: v } })}
+      />
+      <OpButtons getViewport={getViewport} />
       {defs.map((def, i) => (
         <SliderField
           key={def.key}
@@ -86,18 +140,6 @@ function PropsBody({ node, grid }: { node: SceneNode; grid: GridSettings }) {
           onChange={(v) => apply(def.key, def.set(node, clampToDef(def, v)))}
         />
       ))}
-      <ColorField
-        kind="fill"
-        label="塗りの色"
-        value={node.style.fill}
-        onChange={(v) => apply("fill", { style: { ...node.style, fill: v } })}
-      />
-      <ColorField
-        kind="stroke"
-        label="線の色"
-        value={node.style.stroke}
-        onChange={(v) => apply("stroke", { style: { ...node.style, stroke: v } })}
-      />
       <div className="anchor-field">
         <div className="color-title">基準点</div>
         <div className="anchor-row">
@@ -122,7 +164,7 @@ function PropsBody({ node, grid }: { node: SceneNode; grid: GridSettings }) {
   );
 }
 
-export function PropsPanel() {
+export function PropsPanel({ getViewport }: { getViewport: () => Viewport }) {
   const doc = useEditor((s) => currentDoc(s));
   const selection = useEditor((s) => s.selection);
   const onlyId = selection.length === 1 ? selection[0] : undefined;
@@ -132,7 +174,9 @@ export function PropsPanel() {
       <h2>設定</h2>
       {selection.length === 0 && <p className="empty">図形を選ぶと、ここに設定が出ます</p>}
       {selection.length > 1 && <p className="empty">{selection.length} 個の図形を選んでいます</p>}
-      {node && <PropsBody key={node.id} node={node} grid={doc.grid} />}
+      {selection.length > 1 && <ArrangePanel />}
+      {selection.length > 1 && <OpButtons getViewport={getViewport} />}
+      {node && <PropsBody key={node.id} node={node} grid={doc.grid} getViewport={getViewport} />}
     </section>
   );
 }

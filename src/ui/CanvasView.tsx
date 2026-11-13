@@ -1,6 +1,6 @@
 import { createElement, useEffect, useLayoutEffect, useRef } from "react";
 import type { MouseEvent } from "react";
-import { snapPoint, worldOutline } from "../core/geometry";
+import { snapPointToDoc, worldOutline } from "../core/geometry";
 import { getHandles } from "../core/handles";
 import type { Point } from "../core/types";
 import { clickCanvas, fitView, setCursor, zoomAt } from "../editor/actions";
@@ -9,6 +9,8 @@ import { dispatch, editorStore, useEditor } from "../editor/store";
 import { nodeToSvg } from "../render/svg";
 
 const HANDLE_PX = 14;
+const CORNER_PX = 16;
+const VERTEX_PX = 16;
 
 export function CanvasView() {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -17,6 +19,7 @@ export function CanvasView() {
   const selection = useEditor((s) => s.selection);
   const heldHandle = useEditor((s) => s.heldHandle);
   const solo = useEditor((s) => s.solo);
+  const rotateMode = useEditor((s) => s.rotateMode);
   const cursor = useEditor((s) => s.cursor);
   const { zoom, panX, panY } = view;
 
@@ -56,15 +59,15 @@ export function CanvasView() {
     }));
   };
 
-  // grid dots: widen the spacing until it is at least 8 screen px
+  // grid lines: widen the spacing until it is at least 8 screen px (every 5th line is drawn stronger)
   let gridPx = doc.grid.size * zoom;
   while (gridPx < 8) gridPx *= 2;
+  const guides = doc.guides ?? [];
 
   const selected = doc.nodes.filter((n) => selection.includes(n.id));
   const only = selected.length === 1 && selection.length === 1 ? selected[0] : undefined;
   const handles = only && !only.locked ? getHandles(only) : [];
-  const snapTarget = cursor && doc.grid.snap ? snapPoint(cursor, doc.grid) : null;
-  const hs = HANDLE_PX / zoom;
+  const snapTarget = cursor ? snapPointToDoc(cursor, doc) : null;
 
   return (
     <svg
@@ -83,17 +86,35 @@ export function CanvasView() {
         <>
           <defs>
             <pattern
-              id="grid-dots"
-              x={panX - gridPx / 2}
-              y={panY - gridPx / 2}
+              id="grid-minor"
+              x={panX - 0.5}
+              y={panY - 0.5}
               width={gridPx}
               height={gridPx}
               patternUnits="userSpaceOnUse"
             >
-              <circle cx={gridPx / 2} cy={gridPx / 2} r={1.2} fill="var(--grid)" />
+              <path d={`M 0.5 0 V ${gridPx} M 0 0.5 H ${gridPx}`} fill="none" stroke="var(--grid)" strokeWidth={1} />
+            </pattern>
+            <pattern
+              id="grid-major"
+              x={panX - 0.5}
+              y={panY - 0.5}
+              width={gridPx * 5}
+              height={gridPx * 5}
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d={`M 0.5 0 V ${gridPx * 5} M 0 0.5 H ${gridPx * 5}`}
+                fill="none"
+                stroke="var(--grid-major)"
+                strokeWidth={1}
+              />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#grid-dots)" pointerEvents="none" />
+          <rect width="100%" height="100%" fill="url(#grid-minor)" pointerEvents="none" />
+          <rect width="100%" height="100%" fill="url(#grid-major)" pointerEvents="none" />
+          <line data-testid="grid-axis-x" x1={0} x2="100%" y1={panY} y2={panY} stroke="var(--grid-axis)" strokeWidth={1} pointerEvents="none" />
+          <line data-testid="grid-axis-y" y1={0} y2="100%" x1={panX} x2={panX} stroke="var(--grid-axis)" strokeWidth={1} pointerEvents="none" />
         </>
       )}
       <g transform={`translate(${panX} ${panY}) scale(${zoom})`}>
@@ -116,38 +137,100 @@ export function CanvasView() {
             fill="none"
             stroke="var(--accent)"
             strokeWidth={2}
+            strokeDasharray={rotateMode ? "6 4" : undefined}
             vectorEffect="non-scaling-stroke"
             pointerEvents="none"
           />
         ))}
-        {handles.map((h) => (
-          <rect
-            key={h.id}
-            data-handle-id={h.id}
-            x={h.pos.x - hs / 2}
-            y={h.pos.y - hs / 2}
-            width={hs}
-            height={hs}
-            fill={heldHandle === h.id ? "var(--accent)" : "var(--panel)"}
-            stroke="var(--accent)"
-            strokeWidth={2}
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
+        {handles.map((h) => {
+          const common = {
+            "data-handle-id": h.id,
+            fill: heldHandle === h.id ? "var(--accent)" : "var(--panel)",
+            stroke: "var(--accent)",
+            strokeWidth: 2,
+            vectorEffect: "non-scaling-stroke" as const,
+          };
+          if (h.kind === "vertex") {
+            return <circle key={h.id} {...common} cx={h.pos.x} cy={h.pos.y} r={VERTEX_PX / 2 / zoom} />;
+          }
+          const size = (h.kind === "corner" ? CORNER_PX : HANDLE_PX) / zoom;
+          return <rect key={h.id} {...common} x={h.pos.x - size / 2} y={h.pos.y - size / 2} width={size} height={size} />;
+        })}
         {snapTarget && (
-          <circle
-            data-testid="snap-ring"
-            cx={snapTarget.x}
-            cy={snapTarget.y}
-            r={8 / zoom}
-            fill="none"
-            stroke="var(--accent)"
-            strokeWidth={2}
-            vectorEffect="non-scaling-stroke"
-            pointerEvents="none"
-          />
+          <g data-testid="snap-mark" pointerEvents="none" stroke="var(--warn)" strokeWidth={2} fill="none">
+            <circle
+              data-testid="snap-ring"
+              cx={snapTarget.x}
+              cy={snapTarget.y}
+              r={9 / zoom}
+              vectorEffect="non-scaling-stroke"
+            />
+            <line
+              x1={snapTarget.x - 14 / zoom}
+              x2={snapTarget.x + 14 / zoom}
+              y1={snapTarget.y}
+              y2={snapTarget.y}
+              vectorEffect="non-scaling-stroke"
+            />
+            <line
+              x1={snapTarget.x}
+              x2={snapTarget.x}
+              y1={snapTarget.y - 14 / zoom}
+              y2={snapTarget.y + 14 / zoom}
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
         )}
       </g>
+      {guides.map((g) =>
+        g.axis === "h" ? (
+          <line
+            key={g.id}
+            data-guide-id={g.id}
+            x1={0}
+            x2="100%"
+            y1={g.pos * zoom + panY}
+            y2={g.pos * zoom + panY}
+            stroke="var(--guide)"
+            strokeWidth={1.5}
+            pointerEvents="none"
+          />
+        ) : (
+          <line
+            key={g.id}
+            data-guide-id={g.id}
+            y1={0}
+            y2="100%"
+            x1={g.pos * zoom + panX}
+            x2={g.pos * zoom + panX}
+            stroke="var(--guide)"
+            strokeWidth={1.5}
+            pointerEvents="none"
+          />
+        ),
+      )}
+      {rotateMode &&
+        selected.filter((n) => n.visible).map((n) => {
+          const cx = n.transform.x * zoom + panX;
+          const cy = n.transform.y * zoom + panY;
+          return (
+            <g key={`rot-${n.id}`} data-testid="rotate-mark" pointerEvents="none">
+              <circle cx={cx} cy={cy} r={4} fill="var(--accent)" stroke="var(--panel)" strokeWidth={1.5} />
+              <text
+                x={cx + 10}
+                y={cy - 8}
+                fill="var(--accent)"
+                stroke="var(--panel)"
+                strokeWidth={3}
+                paintOrder="stroke"
+                fontSize={14}
+                fontWeight={700}
+              >
+                {`${Math.round(n.transform.rotation)}°`}
+              </text>
+            </g>
+          );
+        })}
     </svg>
   );
 }

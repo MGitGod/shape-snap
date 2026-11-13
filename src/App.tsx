@@ -40,7 +40,7 @@ export function App() {
       </main>
       <aside className="side">
         <ShapeList />
-        <PropsPanel />
+        <PropsPanel getViewport={canvasViewport} />
         <GridPanel />
       </aside>
       <footer className="hints">

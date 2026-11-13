@@ -79,7 +79,13 @@ export function SliderField(props: SliderFieldProps) {
         step={step}
         value={draft ?? String(tidy(value))}
         onFocus={(e) => e.currentTarget.select()}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          const raw = e.target.value;
+          setDraft(raw);
+          // apply as you type while the text reads as a number inside the range
+          const n = Number(raw.trim());
+          if (raw.trim() !== "" && Number.isFinite(n) && n >= min && n <= max) onChange(tidy(n));
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
