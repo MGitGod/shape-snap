@@ -31,7 +31,7 @@ export function createEditorState(doc?: Document): EditorState {
     focusArea: "canvas",
     view: { zoom: 1, panX: 0, panY: 0 },
     cursor: null,
-    anchor: "center",
+    anchor: "auto",
     lastClick: null,
     notice: null,
   };

@@ -50,7 +50,7 @@ export function createNode(
     case "ellipse":
       return { ...base, kind, rx: 2 * g, ry: 2 * g };
     case "polygon":
-      return { ...base, kind, sides: 3, radius: 2 * g, starRatio: 1 };
+      return { ...base, kind, sides: 3, width: 4 * g, height: 4 * g, starRatio: 1 };
   }
 }
 

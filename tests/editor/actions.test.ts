@@ -5,7 +5,7 @@ import type { Document, Point, SceneNode } from "../../src/core/types";
 import {
   clickCanvas, cycleFocus, cycleHandle, cycleSelection, deleteSelection, duplicateSelection, fitView,
   gridCoarser, gridFiner, moveToCursor, nudge, panBy, placeShape, redoAction, setAnchor, setCursor,
-  setNodeProp, toggleLocked, toggleMultiSelect, toggleSolo, undoAction, zoomAt, loadDocument,
+  convertToPath, setNodeProp, toggleLocked, toggleMultiSelect, toggleSolo, undoAction, zoomAt, loadDocument,
 } from "../../src/editor/actions";
 import { createEditorState, currentDoc, primaryNode, type EditorState } from "../../src/editor/state";
 
@@ -94,6 +94,55 @@ describe("clickCanvas", () => {
   it("does nothing when empty space is clicked with no selection", () => {
     const s = stateWith([rect("a", 100, 100)]);
     expect(L(s, { x: 500, y: 500 })).toBe(s);
+  });
+});
+
+describe("grid-true moves", () => {
+  const withMinX = (id: string, minX: number, w = 60): SceneNode => {
+    const n = rect(id, minX + w / 2, 100);
+    return { ...n, width: w } as SceneNode;
+  };
+  it("nudge moves the bounding box to the next grid line", () => {
+    let s = nudge(stateWith([withMinX("a", 63)], ["a"]), 1, 0);
+    expect(nodeBounds(getNode(currentDoc(s), "a")!).minX).toBeCloseTo(80);
+    s = nudge(s, 1, 0);
+    expect(nodeBounds(getNode(currentDoc(s), "a")!).minX).toBeCloseTo(100);
+    s = nudge(stateWith([withMinX("a", 63)], ["a"]), -1, 0);
+    expect(nodeBounds(getNode(currentDoc(s), "a")!).minX).toBeCloseTo(60);
+  });
+  it("auto anchor click puts the top-left on grid lines", () => {
+    const s = L(stateWith([withMinX("a", 70)], ["a"]), { x: 203, y: 198 });
+    const b = nodeBounds(getNode(currentDoc(s), "a")!);
+    expect(b.minX % 20).toBeCloseTo(0);
+    expect(b.minY % 20).toBeCloseTo(0);
+  });
+  it("auto anchor click without snap just centres on the click", () => {
+    let s = stateWith([rect("a", 100, 100)], ["a"]);
+    s = { ...s, history: { ...s.history, present: { ...currentDoc(s), grid: { ...currentDoc(s).grid, snap: false } } } };
+    s = L(s, { x: 203, y: 198 });
+    expect(getNode(currentDoc(s), "a")!.transform).toMatchObject({ x: 203, y: 198 });
+  });
+  it("nudging a held edge lands on the next grid line", () => {
+    const r = { ...rect("a", 100, 100), width: 86 } as SceneNode;   // right edge at 143
+    let s = stateWith([r], ["a"]);
+    s = { ...s, heldHandle: "edge:1" };
+    s = nudge(s, 1, 0);
+    const n = getNode(currentDoc(s), "a") as unknown as { width: number; transform: { x: number } };
+    expect(n.transform.x + n.width / 2).toBeCloseTo(160);
+  });
+  it("convertToPath turns a rect into a path and undo restores it", () => {
+    let s = convertToPath(stateWith([rect("a", 100, 100)], ["a"]));
+    expect(getNode(currentDoc(s), "a")!.kind).toBe("path");
+    expect(s.notice).toContain("自由な形に変えました");
+    s = undoAction(s);
+    expect(getNode(currentDoc(s), "a")!.kind).toBe("rect");
+  });
+  it("convertToPath on an ellipse does nothing but explain", () => {
+    const e = createNode(createDocument(), "ellipse", { x: 100, y: 100 }, "e");
+    const before = stateWith([e], ["e"]);
+    const s = convertToPath(before);
+    expect(currentDoc(s)).toBe(currentDoc(before));
+    expect(s.notice).toContain("円");
   });
 });
 

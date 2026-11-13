@@ -19,7 +19,7 @@ function ellipse(over: Partial<EllipseNode> = {}): EllipseNode {
 }
 function polygon(over: Partial<PolygonNode> = {}): PolygonNode {
   return {
-    ...base, id: "p1", kind: "polygon", sides: 3, radius: 50, starRatio: 1,
+    ...base, id: "p1", kind: "polygon", sides: 3, width: 100, height: 100, starRatio: 1,
     transform: { x: 0, y: 0, rotation: 0 }, style, ...over,
   };
 }

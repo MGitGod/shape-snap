@@ -22,7 +22,7 @@ describe("propDefsFor", () => {
   });
   it("lists ellipse and polygon props", () => {
     expect(keys(ellipse)).toEqual(["x", "y", "rx", "ry", "rotation", "strokeWidth", "opacity"]);
-    expect(keys(polygon)).toEqual(["x", "y", "sides", "radius", "starRatio", "rotation", "strokeWidth", "opacity"]);
+    expect(keys(polygon)).toEqual(["x", "y", "sides", "width", "height", "starRatio", "rotation", "strokeWidth", "opacity"]);
   });
   it("uses the grid for ranges and steps", () => {
     const x = def(rect, "x");

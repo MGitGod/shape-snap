@@ -8,12 +8,12 @@ export interface NodeBase {
 }
 export interface RectNode extends NodeBase { kind: 'rect'; width: number; height: number; cornerRadius: number }
 export interface EllipseNode extends NodeBase { kind: 'ellipse'; rx: number; ry: number }
-export interface PolygonNode extends NodeBase { kind: 'polygon'; sides: number; radius: number; starRatio: number }
+export interface PolygonNode extends NodeBase { kind: 'polygon'; sides: number; width: number; height: number; starRatio: number }
 export interface PathPoint { x: number; y: number; corner: boolean }      // relative to the shape center
 export interface PathNode extends NodeBase { kind: 'path'; points: PathPoint[]; closed: boolean; smooth: boolean; tension: number }
 export type SceneNode = RectNode | EllipseNode | PolygonNode | PathNode;
 export type NodeKind = SceneNode['kind'];
 export interface GridSettings { size: number; visible: boolean; snap: boolean }
 export interface Document { version: 1; grid: GridSettings; nodes: SceneNode[] }
-export type Anchor = 'center' | 'tl' | 'tr' | 'bl' | 'br';
+export type Anchor = 'auto' | 'center' | 'tl' | 'tr' | 'bl' | 'br';
 export const GRID_MIN = 5; export const GRID_MAX = 160;

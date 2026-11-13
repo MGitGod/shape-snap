@@ -49,7 +49,8 @@ export function propDefsFor(node: SceneNode, grid: GridSettings): PropDef[] {
     case "polygon":
       defs.push(
         fieldDef("sides", "辺の数", 3, 12, 1),
-        fieldDef("radius", "半径", half, 1000, half),
+        fieldDef("width", "幅", g, 2000, g),
+        fieldDef("height", "高さ", g, 2000, g),
         fieldDef("starRatio", "星形の割合", 0.1, 1, 0.05),
       );
       break;

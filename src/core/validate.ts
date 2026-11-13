@@ -1,3 +1,4 @@
+import { polygonBoxForRadius } from "./geometry";
 import { GRID_MAX, GRID_MIN, type Document } from "./types";
 
 export type ValidateResult = { ok: true; doc: Document } | { ok: false; errors: string[] };
@@ -99,7 +100,15 @@ export function validateDocument(data: unknown): ValidateResult {
           for (const k of ["rx", "ry"]) checkNum(raw, k, label, errors);
           break;
         case "polygon":
-          for (const k of ["sides", "radius", "starRatio"]) checkNum(raw, k, label, errors);
+          for (const k of ["sides", "starRatio"]) checkNum(raw, k, label, errors);
+          if (isNum(raw.width) && isNum(raw.height)) {
+            // current format
+          } else if (isNum(raw.radius) && !("width" in raw) && !("height" in raw)) {
+            // old format: only a radius; upgraded below
+          } else {
+            checkNum(raw, "width", label, errors);
+            checkNum(raw, "height", label, errors);
+          }
           break;
         case "path":
           checkBool(raw, "closed", label, errors);
@@ -120,6 +129,15 @@ export function validateDocument(data: unknown): ValidateResult {
   }
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, doc: data as unknown as Document };
+  const doc = data as unknown as Document;
+  const nodes = (data.nodes as Rec[]).map((raw) => {
+    if (raw.kind === "polygon" && !isNum(raw.width) && isNum(raw.radius)) {
+      const { radius, ...rest } = raw;
+      const box = polygonBoxForRadius(raw.sides as number, raw.starRatio as number, radius as number);
+      return { ...rest, width: box.width, height: box.height };
+    }
+    return raw;
+  });
+  return { ok: true, doc: { ...doc, nodes: nodes as unknown as Document["nodes"] } };
 }
 

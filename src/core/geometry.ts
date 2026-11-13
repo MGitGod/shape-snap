@@ -30,6 +30,30 @@ export function toLocal(node: SceneNode, world: Point): Point {
   );
 }
 
+function clean(v: number): number {
+  return Math.round(v * 1e12) / 1e12;
+}
+
+/** Regular polygon (or star) of radius 1, first point straight up. */
+function unitPolygon(sides: number, starRatio: number): Point[] {
+  const pts: Point[] = [];
+  const star = starRatio < 1;
+  const count = star ? sides * 2 : sides;
+  const step = star ? Math.PI / sides : (2 * Math.PI) / sides;
+  for (let i = 0; i < count; i++) {
+    const a = -Math.PI / 2 + i * step;
+    const rad = star && i % 2 === 1 ? starRatio : 1;
+    pts.push({ x: clean(rad * Math.cos(a)), y: clean(rad * Math.sin(a)) });
+  }
+  return pts;
+}
+
+/** Width and height of the box around a polygon of the given radius (used to upgrade old files). */
+export function polygonBoxForRadius(sides: number, starRatio: number, radius: number): { width: number; height: number } {
+  const b = boundsOf(unitPolygon(sides, starRatio));
+  return { width: (b.maxX - b.minX) * radius, height: (b.maxY - b.minY) * radius };
+}
+
 export function localOutline(node: SceneNode): Point[] {
   switch (node.kind) {
     case "rect": {
@@ -51,16 +75,16 @@ export function localOutline(node: SceneNode): Point[] {
       return pts;
     }
     case "polygon": {
-      const pts: Point[] = [];
-      const star = node.starRatio < 1;
-      const count = star ? node.sides * 2 : node.sides;
-      const step = star ? Math.PI / node.sides : (2 * Math.PI) / node.sides;
-      for (let i = 0; i < count; i++) {
-        const a = -Math.PI / 2 + i * step;
-        const rad = star && i % 2 === 1 ? node.radius * node.starRatio : node.radius;
-        pts.push({ x: rad * Math.cos(a), y: rad * Math.sin(a) });
-      }
-      return pts;
+      const unit = unitPolygon(node.sides, node.starRatio);
+      const b = boundsOf(unit);
+      const bw = b.maxX - b.minX;
+      const bh = b.maxY - b.minY;
+      const cx = (b.minX + b.maxX) / 2;
+      const cy = (b.minY + b.maxY) / 2;
+      return unit.map((p) => ({
+        x: bw > 0 ? ((p.x - cx) / bw) * node.width : 0,
+        y: bh > 0 ? ((p.y - cy) / bh) * node.height : 0,
+      }));
     }
     case "path":
       return node.points.map((p) => ({ x: p.x, y: p.y }));
@@ -105,7 +129,7 @@ export function nodesBounds(nodes: SceneNode[]): Bounds | null {
 }
 
 export function anchorPoint(node: SceneNode, anchor: Anchor): Point {
-  if (anchor === "center") return { x: node.transform.x, y: node.transform.y };
+  if (anchor === "center" || anchor === "auto") return { x: node.transform.x, y: node.transform.y };
   const b = nodeBounds(node);
   switch (anchor) {
     case "tl": return { x: b.minX, y: b.minY };

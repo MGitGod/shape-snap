@@ -1,6 +1,6 @@
 import { commit, redo, undo } from "../core/history";
-import { anchorPoint, hitStack, nodesBounds, snapPoint } from "../core/geometry";
-import { findHandleAt, moveHandle, nextHandleId, nudgeHandle } from "../core/handles";
+import { anchorPoint, hitStack, nodeBounds, nodesBounds, snapPoint, snapValue } from "../core/geometry";
+import { findHandleAt, moveHandle, nextGridLine, nextHandleId, nudgeHandle, toPath } from "../core/handles";
 import {
   addNode, createNode, duplicateNodes, removeNodes, reorderNode, setGrid, translateNodes, updateNode,
 } from "../core/model";
@@ -38,7 +38,7 @@ function applyHeldHandle(s: EditorState, p: Point, now?: number): EditorState {
   const node = primaryNode(s);
   if (!node || s.heldHandle === null) return s;
   const grid = currentDoc(s).grid;
-  const next = moveHandle(node, s.heldHandle, snapPoint(p, grid), grid.size);
+  const next = moveHandle(node, s.heldHandle, snapPoint(p, grid), grid.size, grid.snap ? grid.size : undefined);
   return replaceNode(s, node, next, undefined, now);
 }
 
@@ -46,10 +46,23 @@ function moveSelectionToPoint(s: EditorState, p: Point, now?: number): EditorSta
   const node = primaryNode(s);
   if (!node) return s;
   const doc = currentDoc(s);
-  const target = snapPoint(p, doc.grid);
-  const from = anchorPoint(node, s.anchor);
-  const dx = target.x - from.x;
-  const dy = target.y - from.y;
+  let dx: number;
+  let dy: number;
+  if (s.anchor === "auto") {
+    // centre the primary shape on the click, then slide it so its top-left lands on grid lines
+    const b = nodeBounds(node);
+    dx = p.x - node.transform.x;
+    dy = p.y - node.transform.y;
+    if (doc.grid.snap) {
+      dx = snapValue(b.minX + dx, doc.grid.size) - b.minX;
+      dy = snapValue(b.minY + dy, doc.grid.size) - b.minY;
+    }
+  } else {
+    const target = snapPoint(p, doc.grid);
+    const from = anchorPoint(node, s.anchor);
+    dx = target.x - from.x;
+    dy = target.y - from.y;
+  }
   if (dx === 0 && dy === 0) return s;
   const ids = s.selection.filter((id) => {
     const n = doc.nodes.find((x) => x.id === id);
@@ -135,13 +148,36 @@ export function nudge(s: EditorState, dx: -1 | 0 | 1, dy: -1 | 0 | 1, now?: numb
   const step = doc.grid.size;
   const node = primaryNode(s);
   if (s.heldHandle !== null && node) {
-    const next = nudgeHandle(node, s.heldHandle, { x: dx, y: dy }, step, step);
+    const next = nudgeHandle(node, s.heldHandle, { x: dx, y: dy }, step, step, doc.grid.snap);
     return replaceNode(s, node, next, "nudge-handle", now);
   }
   if (s.selection.length > 0) {
-    return withDoc(s, translateNodes(doc, s.selection, dx * step, dy * step), "nudge", now);
+    let mx = dx * step;
+    let my = dy * step;
+    if (doc.grid.snap && node) {
+      // move the bounding box to the next grid line, not by a fixed amount
+      const b = nodeBounds(node);
+      if (dx !== 0) mx = nextGridLine(b.minX, dx, step) - b.minX;
+      if (dy !== 0) my = nextGridLine(b.minY, dy, step) - b.minY;
+    }
+    return withDoc(s, translateNodes(doc, s.selection, mx, my), "nudge", now);
   }
   return panBy(s, -dx * 40, -dy * 40);
+}
+
+export function convertToPath(s: EditorState, now?: number): EditorState {
+  const doc = currentDoc(s);
+  let next = doc;
+  let changed = 0;
+  for (const id of s.selection) {
+    const node = doc.nodes.find((n) => n.id === id);
+    const path = node ? toPath(node) : null;
+    if (!path) continue;
+    next = updateNode(next, id, () => path);
+    changed++;
+  }
+  if (changed === 0) return { ...s, notice: "円は自由な形に変えられません（線の機能と一緒に入ります）" };
+  return { ...withDoc(s, next, undefined, now), heldHandle: null, notice: "自由な形に変えました（Z で戻せます）" };
 }
 
 export function cycleSelection(s: EditorState, dir: 1 | -1): EditorState {

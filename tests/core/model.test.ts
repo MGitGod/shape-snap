@@ -37,7 +37,7 @@ describe("createNode", () => {
   });
   it("creates a polygon", () => {
     const n = createNode(createDocument(), "polygon", { x: 0, y: 0 }, "p");
-    expect(n).toMatchObject({ kind: "polygon", sides: 3, radius: 40, starRatio: 1, name: "多角形 1" });
+    expect(n).toMatchObject({ kind: "polygon", sides: 3, width: 80, height: 80, starRatio: 1, name: "多角形 1" });
   });
   it("scales with grid size", () => {
     const doc = setGrid(createDocument(), { size: 10 });

@@ -17,7 +17,7 @@ const rect = (id = "r", rotation = 0, w = 80, h = 80): RectNode =>
   ({ ...base(id, 100, 100, rotation), kind: "rect", width: w, height: h, cornerRadius: 0 });
 const ellipse = (): EllipseNode => ({ ...base("e"), kind: "ellipse", rx: 40, ry: 20 });
 const polygon = (sides: number, starRatio = 1): PolygonNode =>
-  ({ ...base("p"), kind: "polygon", sides, radius: 40, starRatio });
+  ({ ...base("p"), kind: "polygon", sides, width: 80, height: 80, starRatio });
 const path = (closed: boolean): PathNode => ({
   ...base("pa"), kind: "path", closed, smooth: false, tension: 0.5,
   points: [
@@ -84,8 +84,22 @@ describe("outlines and bounds", () => {
   it("star has 2 * sides points, inner ones scaled", () => {
     const o = localOutline(polygon(5, 0.5));
     expect(o).toHaveLength(10);
-    expect(Math.hypot(o[0]!.x, o[0]!.y)).toBeCloseTo(40);
-    expect(Math.hypot(o[1]!.x, o[1]!.y)).toBeCloseTo(20);
+    const xs = o.map((p) => p.x);
+    const ys = o.map((p) => p.y);
+    expect(Math.min(...xs)).toBeCloseTo(-40);
+    expect(Math.max(...xs)).toBeCloseTo(40);
+    expect(Math.min(...ys)).toBeCloseTo(-40);
+    expect(Math.max(...ys)).toBeCloseTo(40);
+  });
+  it("polygon outline fills its width and height box exactly", () => {
+    const tri = worldOutline(polygon(3));
+    expect(tri[0]!.x).toBeCloseTo(100); expect(tri[0]!.y).toBeCloseTo(60);
+    expect(tri[1]!.x).toBeCloseTo(140); expect(tri[1]!.y).toBeCloseTo(140);
+    expect(tri[2]!.x).toBeCloseTo(60); expect(tri[2]!.y).toBeCloseTo(140);
+    const sq = localOutline(polygon(4));
+    expect(sq).toEqual([{ x: 0, y: -40 }, { x: 40, y: 0 }, { x: 0, y: 40 }, { x: -40, y: 0 }]);
+    const wide = { ...polygon(4), width: 120, height: 40 };
+    expect(localOutline(wide)).toEqual([{ x: 0, y: -20 }, { x: 60, y: 0 }, { x: 0, y: 20 }, { x: -60, y: 0 }]);
   });
   it("path outline is its points", () => {
     expect(localOutline(path(false))).toEqual([{ x: -40, y: 0 }, { x: 40, y: 0 }]);

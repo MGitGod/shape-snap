@@ -9,6 +9,19 @@ function errorsOf(data: unknown): string[] {
 }
 
 describe("validateDocument", () => {
+  it("upgrades an old polygon with a radius to width and height", () => {
+    let doc = createDocument();
+    doc = addNode(doc, createNode(doc, "polygon", { x: 0, y: 0 }, "p"));
+    const { width: _w, height: _h, ...rest } = doc.nodes[0] as unknown as Record<string, unknown>;
+    const old = { ...doc, nodes: [{ ...rest, sides: 4, radius: 40 }] };
+    const r = validateDocument(old);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const n = r.doc.nodes[0] as unknown as Record<string, unknown>;
+    expect(n.width).toBeCloseTo(80);
+    expect(n.height).toBeCloseTo(80);
+    expect("radius" in n).toBe(false);
+  });
   it("accepts a fresh document", () => {
     const r = validateDocument(createDocument());
     expect(r.ok).toBe(true);
