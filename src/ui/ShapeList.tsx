@@ -143,7 +143,7 @@ export function ShapeList() {
     <section className="panel" data-area="list" aria-label="図形リスト">
       <h2>図形リスト</h2>
       {shown.length === 0 ? (
-        <p className="empty">R・C・P で図形を置けます</p>
+        <p className="empty">R・C・P で図形、L で線を置けます</p>
       ) : (
         <div role="listbox" aria-label="図形" aria-multiselectable="true">
           {shown.map((n) => (
