@@ -6,7 +6,8 @@ export type ActionId =
   | "move-up" | "move-down" | "move-left" | "move-right" | "move-to-cursor"
   | "forward" | "backward" | "duplicate" | "delete" | "undo" | "redo"
   | "toggle-visible" | "toggle-locked" | "toggle-solo"
-  | "fit-view" | "grid-finer" | "grid-coarser";
+  | "fit-view" | "grid-finer" | "grid-coarser"
+  | "scale-down" | "scale-up" | "rotate-mode" | "fill-none" | "to-path" | "guide-h" | "guide-v";
 
 export interface KeyBinding {
   key: string;
@@ -48,6 +49,13 @@ export const KEYMAP: KeyBinding[] = [
   b("0", "fit-view", "全体表示", "見る"),
   b("1", "grid-finer", "グリッドを細かく", "見る"),
   b("2", "grid-coarser", "グリッドを粗く", "見る"),
+  b(",", "scale-down", "縮小", "編集", true),
+  b(".", "scale-up", "拡大", "編集", true),
+  b("v", "rotate-mode", "回転", "動かす"),
+  b("n", "fill-none", "塗りなし", "編集"),
+  b("j", "to-path", "自由な形に変える", "編集"),
+  b("-", "guide-h", "横のガイド", "見る"),
+  b("i", "guide-v", "縦のガイド", "見る"),
 ];
 
 export function findBinding(key: string): KeyBinding | undefined {
@@ -75,6 +83,9 @@ export interface Hint { keys: string; label: string }
 const h = (keys: string, label: string): Hint => ({ keys, label });
 
 function baseHints(s: EditorState): Hint[] {
+  if (s.rotateMode) {
+    return [h("← →", "15°ずつ回す"), h("↑ ↓", "1°ずつ回す"), h("V / Esc", "回転を終える")];
+  }
   if (s.heldHandle !== null) {
     return [
       h("クリック / 矢印 / Space", "つまみを動かす"),
@@ -83,13 +94,18 @@ function baseHints(s: EditorState): Hint[] {
     ];
   }
   if (s.multiSelect) {
-    return [h("クリック", "足す・外す"), h("M", "複数選択を終える"), h("矢印", "動かす")];
+    return [
+      h("クリック", "足す・外す"), h("M", "複数選択を終える"), h("矢印", "動かす"),
+      h("設定", "揃える・間隔"),
+    ];
   }
   if (s.selection.length > 0) {
     return [
       h("つまみをクリック", "つかむ"),
       h("何もない点をクリック / Space / 矢印", "動かす"),
       h("W", "つまみ"),
+      h("V", "回転"),
+      h(", .", "縮小・拡大"),
       h("D", "複製"),
       h("Delete", "消す"),
       h("右クリック / Esc", "選択を外す"),

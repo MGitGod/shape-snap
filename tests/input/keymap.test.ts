@@ -12,6 +12,7 @@ const ALL_ACTIONS: ActionId[] = [
   "forward", "backward", "duplicate", "delete", "undo", "redo",
   "toggle-visible", "toggle-locked", "toggle-solo",
   "fit-view", "grid-finer", "grid-coarser",
+  "scale-down", "scale-up", "rotate-mode", "fill-none", "to-path", "guide-h", "guide-v",
 ];
 
 function withShape(): EditorState {
@@ -29,9 +30,9 @@ describe("KEYMAP", () => {
     const keys = KEYMAP.map((b) => b.key);
     expect(new Set(keys).size).toBe(keys.length);
   });
-  it("allows auto-repeat only on the four arrows", () => {
+  it("allows auto-repeat only on the four arrows and scale keys", () => {
     const rep = KEYMAP.filter((b) => b.repeat).map((b) => b.key).sort();
-    expect(rep).toEqual(["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp"]);
+    expect(rep).toEqual([",", ".", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp"]);
   });
   it("finds bindings case-insensitively", () => {
     expect(findBinding("R")?.action).toBe("place-rect");
@@ -74,5 +75,17 @@ describe("hintsFor", () => {
     const h = hintsFor({ ...createEditorState(), notice: "テスト" });
     expect(h[0]).toEqual({ keys: "", label: "テスト" });
     expect(h[1]).toEqual({ keys: "R", label: "四角" });
+  });
+});
+
+describe("stage 1.5 bindings", () => {
+  it("finds the new keys and rotate hints", () => {
+    const pairs: [string, ActionId][] = [
+      [",", "scale-down"], [".", "scale-up"], ["v", "rotate-mode"], ["n", "fill-none"],
+      ["j", "to-path"], ["-", "guide-h"], ["i", "guide-v"],
+    ];
+    for (const [k, a] of pairs) expect(findBinding(k)?.action).toBe(a);
+    const h = hintsFor({ ...withShape(), rotateMode: true });
+    expect(h.map((x) => x.label)).toEqual(["15°ずつ回す", "1°ずつ回す", "回転を終える"]);
   });
 });

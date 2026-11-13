@@ -1,6 +1,6 @@
 import {
   GRID_MAX, GRID_MIN,
-  type Document, type GridSettings, type NodeKind, type Point, type SceneNode, type Style,
+  type Document, type GridSettings, type Guide, type NodeKind, type Point, type SceneNode, type Style,
 } from "./types";
 
 export const DEFAULT_STYLE: Style = { fill: "#1d2330", stroke: null, strokeWidth: 2, opacity: 1 };
@@ -124,4 +124,22 @@ export function setGrid(doc: Document, patch: Partial<GridSettings>): Document {
   const grid = { ...doc.grid, ...patch };
   grid.size = Math.min(GRID_MAX, Math.max(GRID_MIN, grid.size));
   return { ...doc, grid };
+}
+
+export function addGuide(doc: Document, axis: "h" | "v", pos: number, id?: string): Document {
+  const guides = doc.guides ?? [];
+  if (guides.some((g) => g.axis === axis && g.pos === pos)) return doc;
+  const guide: Guide = { id: id ?? crypto.randomUUID(), axis, pos };
+  return { ...doc, guides: [...guides, guide] };
+}
+
+export function removeGuide(doc: Document, id: string): Document {
+  const guides = doc.guides ?? [];
+  if (!guides.some((g) => g.id === id)) return doc;
+  return { ...doc, guides: guides.filter((g) => g.id !== id) };
+}
+
+export function clearGuides(doc: Document): Document {
+  if ((doc.guides ?? []).length === 0) return doc;
+  return { ...doc, guides: [] };
 }

@@ -1,8 +1,11 @@
 import { commit, redo, undo } from "../core/history";
-import { anchorPoint, hitStack, nodeBounds, nodesBounds, snapPoint, snapValue } from "../core/geometry";
+import {
+  alignNodes, distributeNodes, scaleNode, scaleStepFactor, toggleFillNone, type AlignMode,
+} from "../core/arrange";
+import { anchorPoint, hitStack, nodeBounds, nodesBounds, snapPointToDoc, snapValue } from "../core/geometry";
 import { findHandleAt, moveHandle, nextGridLine, nextHandleId, nudgeHandle, toPath } from "../core/handles";
 import {
-  addNode, createNode, duplicateNodes, removeNodes, reorderNode, setGrid, translateNodes, updateNode,
+  addGuide, addNode, clearGuides, createNode, duplicateNodes, removeGuide, removeNodes, reorderNode, setGrid, translateNodes, updateNode,
 } from "../core/model";
 import type { Anchor, Document, GridSettings, Point, SceneNode } from "../core/types";
 import {
@@ -18,9 +21,10 @@ const KIND_CHANGED_NOTICE = "自由な形に変わりました（Z で戻せま�
 function normalize(s: EditorState): EditorState {
   const ids = new Set(currentDoc(s).nodes.map((n) => n.id));
   const selection = s.selection.filter((id) => ids.has(id));
+  const rotateMode = selection.length === 0 ? false : s.rotateMode;
   const heldHandle = selection.length === 1 ? s.heldHandle : null;
   const solo = selection.length === 0 ? false : s.solo;
-  return { ...s, selection, heldHandle, solo };
+  return { ...s, selection, heldHandle, solo, rotateMode };
 }
 
 function withDoc(s: EditorState, doc: Document, key?: string, now?: number): EditorState {
@@ -38,7 +42,7 @@ function applyHeldHandle(s: EditorState, p: Point, now?: number): EditorState {
   const node = primaryNode(s);
   if (!node || s.heldHandle === null) return s;
   const grid = currentDoc(s).grid;
-  const next = moveHandle(node, s.heldHandle, snapPoint(p, grid), grid.size, grid.snap ? grid.size : undefined);
+  const next = moveHandle(node, s.heldHandle, snapPointToDoc(p, currentDoc(s)), grid.size, grid.snap ? grid.size : undefined);
   return replaceNode(s, node, next, undefined, now);
 }
 
@@ -58,7 +62,7 @@ function moveSelectionToPoint(s: EditorState, p: Point, now?: number): EditorSta
       dy = snapValue(b.minY + dy, doc.grid.size) - b.minY;
     }
   } else {
-    const target = snapPoint(p, doc.grid);
+    const target = snapPointToDoc(p, doc);
     const from = anchorPoint(node, s.anchor);
     dx = target.x - from.x;
     dy = target.y - from.y;
@@ -82,7 +86,7 @@ export function placeShape(
   s: EditorState, kind: "rect" | "ellipse" | "polygon", fallbackCenter: Point, now?: number,
 ): EditorState {
   const doc = currentDoc(s);
-  const at = snapPoint(s.cursor ?? fallbackCenter, doc.grid);
+  const at = snapPointToDoc(s.cursor ?? fallbackCenter, doc);
   const node = createNode(doc, kind, at);
   return {
     ...withDoc(s, addNode(doc, node), undefined, now),
@@ -93,8 +97,9 @@ export function placeShape(
 }
 
 export function escape(s: EditorState): EditorState {
+  if (s.rotateMode) return { ...s, rotateMode: false, notice: null };
   if (s.heldHandle !== null) return { ...s, heldHandle: null, notice: null };
-  return { ...s, selection: [], heldHandle: null, multiSelect: false, solo: false, notice: null };
+  return { ...s, selection: [], heldHandle: null, multiSelect: false, solo: false, rotateMode: false, notice: null };
 }
 
 export function clickCanvas(s: EditorState, p: Point, button: "left" | "right", opts: ClickOptions): EditorState {
@@ -147,6 +152,16 @@ export function nudge(s: EditorState, dx: -1 | 0 | 1, dy: -1 | 0 | 1, now?: numb
   const doc = currentDoc(s);
   const step = doc.grid.size;
   const node = primaryNode(s);
+  if (s.rotateMode && s.selection.length > 0) {
+    const delta = dx * 15 + dy * 1;
+    const ids = new Set(s.selection);
+    const nodes = doc.nodes.map((n) => {
+      if (!ids.has(n.id) || n.locked) return n;
+      const rotation = (((n.transform.rotation + delta) % 360) + 360) % 360;
+      return { ...n, transform: { ...n.transform, rotation } };
+    });
+    return withDoc(s, { ...doc, nodes }, "rotate", now);
+  }
   if (s.heldHandle !== null && node) {
     const next = nudgeHandle(node, s.heldHandle, { x: dx, y: dy }, step, step, doc.grid.snap);
     return replaceNode(s, node, next, "nudge-handle", now);
@@ -178,6 +193,72 @@ export function convertToPath(s: EditorState, now?: number): EditorState {
   }
   if (changed === 0) return { ...s, notice: "円は自由な形に変えられません（線の機能と一緒に入ります）" };
   return { ...withDoc(s, next, undefined, now), heldHandle: null, notice: "自由な形に変えました（Z で戻せます）" };
+}
+
+const NEED_TWO_NOTICE = "2 個以上の図形を選んでください（M で複数選択）";
+
+export function alignSelection(s: EditorState, mode: AlignMode, now?: number): EditorState {
+  if (s.selection.length < 2) return { ...s, notice: NEED_TWO_NOTICE };
+  const doc = currentDoc(s);
+  const next = alignNodes(doc, s.selection, mode);
+  return next === doc ? s : withDoc(s, next, undefined, now);
+}
+
+export function distributeSelection(
+  s: EditorState, axis: "x" | "y", gap: number | null, coalesceKey?: string, now?: number,
+): EditorState {
+  if (s.selection.length < 2) return { ...s, notice: NEED_TWO_NOTICE };
+  const doc = currentDoc(s);
+  return withDoc(s, distributeNodes(doc, s.selection, axis, gap), coalesceKey, now);
+}
+
+export function scaleSelection(s: EditorState, dir: 1 | -1, now?: number): EditorState {
+  const doc = currentDoc(s);
+  const ids = new Set(s.selection);
+  let changed = false;
+  const nodes = doc.nodes.map((n) => {
+    if (!ids.has(n.id) || n.locked) return n;
+    const f = scaleStepFactor(n, dir, doc.grid.size);
+    if (f === 1) return n;
+    changed = true;
+    return scaleNode(n, f);
+  });
+  if (!changed) return s;
+  return withDoc(s, { ...doc, nodes }, "scale", now);
+}
+
+export function toggleRotateMode(s: EditorState): EditorState {
+  if (s.rotateMode) return { ...s, rotateMode: false, notice: null };
+  if (s.selection.length === 0) return { ...s, notice: "図形を選んでから V を押してください" };
+  return { ...s, rotateMode: true, heldHandle: null, notice: null };
+}
+
+export function toggleFillNoneSelection(s: EditorState, now?: number): EditorState {
+  const doc = currentDoc(s);
+  const ids = new Set(s.selection);
+  const nodes = doc.nodes.map((n) => (ids.has(n.id) && !n.locked ? toggleFillNone(n) : n));
+  if (s.selection.length === 0) return s;
+  return withDoc(s, { ...doc, nodes }, undefined, now);
+}
+
+export function addGuideAtCursor(s: EditorState, axis: "h" | "v", now?: number): EditorState {
+  if (!s.cursor) return { ...s, notice: "カーソルをキャンバスに置いてから押してください" };
+  const doc = currentDoc(s);
+  const snapped = snapPointToDoc(s.cursor, doc);
+  const next = addGuide(doc, axis, axis === "h" ? snapped.y : snapped.x);
+  return next === doc ? s : withDoc(s, next, undefined, now);
+}
+
+export function removeGuideAction(s: EditorState, id: string, now?: number): EditorState {
+  const doc = currentDoc(s);
+  const next = removeGuide(doc, id);
+  return next === doc ? s : withDoc(s, next, undefined, now);
+}
+
+export function clearGuidesAction(s: EditorState, now?: number): EditorState {
+  const doc = currentDoc(s);
+  const next = clearGuides(doc);
+  return next === doc ? s : withDoc(s, next, undefined, now);
 }
 
 export function cycleSelection(s: EditorState, dir: 1 | -1): EditorState {
@@ -325,5 +406,5 @@ export function cycleFocus(s: EditorState): EditorState {
 
 export function loadDocument(s: EditorState, doc: Document): EditorState {
   const fresh = createEditorState(doc);
-  return { ...fresh, view: s.view, anchor: s.anchor, focusArea: s.focusArea, cursor: s.cursor };
+  return { ...fresh, rotateMode: false, view: s.view, anchor: s.anchor, focusArea: s.focusArea, cursor: s.cursor };
 }

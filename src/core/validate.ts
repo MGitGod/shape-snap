@@ -128,6 +128,18 @@ export function validateDocument(data: unknown): ValidateResult {
     });
   }
 
+  if (data.guides !== undefined) {
+    if (!Array.isArray(data.guides)) {
+      errors.push("guides が配列ではありません");
+    } else {
+      data.guides.forEach((g: unknown, i: number) => {
+        if (!isRec(g) || typeof g.id !== "string" || (g.axis !== "h" && g.axis !== "v") || !isNum(g.pos)) {
+          errors.push(`ガイド ${i + 1}: id（文字列）、axis（h か v）、pos（数値）が正しくありません`);
+        }
+      });
+    }
+  }
+
   if (errors.length > 0) return { ok: false, errors };
   const doc = data as unknown as Document;
   const nodes = (data.nodes as Rec[]).map((raw) => {

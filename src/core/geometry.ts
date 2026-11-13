@@ -11,6 +11,30 @@ export function snapPoint(p: Point, grid: GridSettings): Point {
   return { x: snapValue(p.x, grid.size), y: snapValue(p.y, grid.size) };
 }
 
+function snapAxis(v: number, axis: "h" | "v", doc: Document): number {
+  const range = doc.grid.size / 2;
+  let best = v;
+  let bestDist = Infinity;
+  if (doc.grid.snap) {
+    best = snapValue(v, doc.grid.size);
+    bestDist = Math.abs(best - v);
+  }
+  for (const g of doc.guides ?? []) {
+    if (g.axis !== axis) continue;
+    const d = Math.abs(g.pos - v);
+    if (d <= range && d <= bestDist) {
+      best = g.pos;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+/** Snap to grid lines and guides; x uses vertical guides, y uses horizontal ones. */
+export function snapPointToDoc(p: Point, doc: Document): Point {
+  return { x: snapAxis(p.x, "v", doc), y: snapAxis(p.y, "h", doc) };
+}
+
 export function rotateVector(v: Point, degrees: number): Point {
   const r = (degrees * Math.PI) / 180;
   const c = Math.cos(r);

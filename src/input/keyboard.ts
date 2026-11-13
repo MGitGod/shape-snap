@@ -1,7 +1,7 @@
 import {
-  cycleFocus, cycleHandle, cycleSelection, deleteSelection, duplicateSelection, escape, fitView,
-  gridCoarser, gridFiner, moveToCursor, nudge, placeShape, redoAction, reorderSelection,
-  toggleLocked, toggleMultiSelect, toggleSolo, toggleVisible, undoAction,
+  addGuideAtCursor, convertToPath, cycleFocus, cycleHandle, cycleSelection, deleteSelection, duplicateSelection, escape, fitView,
+  gridCoarser, gridFiner, moveToCursor, nudge, placeShape, redoAction, reorderSelection, scaleSelection,
+  toggleFillNoneSelection, toggleLocked, toggleRotateMode, toggleMultiSelect, toggleSolo, toggleVisible, undoAction,
 } from "../editor/actions";
 import { dispatch, editorStore } from "../editor/store";
 import { findBinding, type ActionId } from "./keymap";
@@ -44,6 +44,13 @@ export function runAction(action: ActionId, viewport: Viewport): void {
     case "fit-view": dispatch((s) => fitView(s, viewport)); break;
     case "grid-finer": dispatch((s) => gridFiner(s)); break;
     case "grid-coarser": dispatch((s) => gridCoarser(s)); break;
+    case "scale-down": dispatch((s) => scaleSelection(s, -1)); break;
+    case "scale-up": dispatch((s) => scaleSelection(s, 1)); break;
+    case "rotate-mode": dispatch(toggleRotateMode); break;
+    case "fill-none": dispatch((s) => toggleFillNoneSelection(s)); break;
+    case "to-path": dispatch((s) => convertToPath(s)); break;
+    case "guide-h": dispatch((s) => addGuideAtCursor(s, "h")); break;
+    case "guide-v": dispatch((s) => addGuideAtCursor(s, "v")); break;
   }
 }
 

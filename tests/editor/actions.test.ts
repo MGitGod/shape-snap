@@ -5,7 +5,7 @@ import type { Document, Point, SceneNode } from "../../src/core/types";
 import {
   clickCanvas, cycleFocus, cycleHandle, cycleSelection, deleteSelection, duplicateSelection, fitView,
   gridCoarser, gridFiner, moveToCursor, nudge, panBy, placeShape, redoAction, setAnchor, setCursor,
-  convertToPath, setNodeProp, toggleLocked, toggleMultiSelect, toggleSolo, undoAction, zoomAt, loadDocument,
+  convertToPath, addGuideAtCursor, escape, scaleSelection, toggleRotateMode, setNodeProp, toggleLocked, toggleMultiSelect, toggleSolo, undoAction, zoomAt, loadDocument,
 } from "../../src/editor/actions";
 import { createEditorState, currentDoc, primaryNode, type EditorState } from "../../src/editor/state";
 
@@ -341,5 +341,48 @@ describe("misc", () => {
     expect(s.notice).toContain("自由な形");
     s = undoAction(s);
     expect(primaryNode(s)!.kind).toBe("polygon");
+  });
+});
+
+describe("rotate mode, scale and guides", () => {
+  it("rotates with arrows, wraps, and escape leaves the selection", () => {
+    let s = toggleRotateMode(stateWith([rect("a", 0, 0)], ["a"]));
+    expect(s.rotateMode).toBe(true);
+    s = nudge(s, 1, 0);
+    expect(primaryNode(s)!.transform.rotation).toBe(15);
+    s = nudge(s, 0, -1);
+    expect(primaryNode(s)!.transform.rotation).toBe(14);
+    expect(primaryNode(s)!.transform.x).toBe(0);
+    s = escape(s);
+    expect(s.rotateMode).toBe(false);
+    expect(s.selection).toEqual(["a"]);
+  });
+  it("wraps 350 + 15 to 5", () => {
+    const n = { ...rect("a", 0, 0), transform: { x: 0, y: 0, rotation: 350 } };
+    let s = toggleRotateMode(stateWith([n], ["a"]));
+    s = nudge(s, 1, 0);
+    expect(primaryNode(s)!.transform.rotation).toBe(5);
+  });
+  it("does not enter rotate mode without a selection", () => {
+    const s = toggleRotateMode(stateWith([rect("a", 0, 0)]));
+    expect(s.rotateMode).toBe(false);
+    expect(s.notice).toBe("図形を選んでから V を押してください");
+  });
+  it("scaleSelection undoes in one step", () => {
+    const width = (s: EditorState) => nodeBounds(primaryNode(s)!).maxX - nodeBounds(primaryNode(s)!).minX;
+    let s = stateWith([rect("a", 0, 0)], ["a"]);
+    s = scaleSelection(scaleSelection(s, 1, 0), 1, 10);
+    expect(width(s)).toBe(120);
+    s = undoAction(s);
+    expect(width(s)).toBe(80);
+  });
+  it("addGuideAtCursor commits and undoes", () => {
+    let s = setCursor(createEditorState(), { x: 47, y: 10 });
+    s = addGuideAtCursor(s, "v");
+    expect(currentDoc(s).guides).toHaveLength(1);
+    expect(currentDoc(s).guides![0]).toMatchObject({ axis: "v", pos: 40 });
+    s = undoAction(s);
+    expect(currentDoc(s).guides ?? []).toHaveLength(0);
+    expect(addGuideAtCursor(createEditorState(), "h").notice).toBe("カーソルをキャンバスに置いてから押してください");
   });
 });

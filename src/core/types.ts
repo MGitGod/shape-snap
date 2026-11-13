@@ -14,6 +14,7 @@ export interface PathNode extends NodeBase { kind: 'path'; points: PathPoint[]; 
 export type SceneNode = RectNode | EllipseNode | PolygonNode | PathNode;
 export type NodeKind = SceneNode['kind'];
 export interface GridSettings { size: number; visible: boolean; snap: boolean }
-export interface Document { version: 1; grid: GridSettings; nodes: SceneNode[] }
+export interface Guide { id: string; axis: 'h' | 'v'; pos: number }       // h = horizontal line (y = pos), v = vertical line (x = pos)
+export interface Document { version: 1; grid: GridSettings; nodes: SceneNode[]; guides?: Guide[] }
 export type Anchor = 'auto' | 'center' | 'tl' | 'tr' | 'bl' | 'br';
 export const GRID_MIN = 5; export const GRID_MAX = 160;

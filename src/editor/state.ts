@@ -12,6 +12,7 @@ export interface EditorState {
   selection: string[];
   heldHandle: string | null;
   multiSelect: boolean;
+  rotateMode: boolean;
   solo: boolean;
   focusArea: FocusArea;
   view: View;
@@ -27,6 +28,7 @@ export function createEditorState(doc?: Document): EditorState {
     selection: [],
     heldHandle: null,
     multiSelect: false,
+    rotateMode: false,
     solo: false,
     focusArea: "canvas",
     view: { zoom: 1, panX: 0, panY: 0 },
