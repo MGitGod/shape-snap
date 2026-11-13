@@ -98,7 +98,7 @@ body {
 }
 .btn:hover { background: var(--accent-soft); }
 .btn.on, .btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
-.btn.small { min-height: 32px; padding: 0 8px; font-size: 0.8rem; }
+.btn.small { min-height: 40px; padding: 0 8px; font-size: 0.8rem; }
 .btn kbd, .tool kbd {
   background: var(--key-bg);
   border: 1px solid var(--line);
@@ -124,7 +124,7 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 40px;
+  height: 48px;
   padding: 0 6px;
   border: 1px solid transparent;
   border-radius: 6px;
