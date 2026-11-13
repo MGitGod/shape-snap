@@ -1,6 +1,6 @@
 import { commit, redo, undo } from "../core/history";
 import {
-  alignNodes, distributeNodes, scaleNode, scaleStepFactor, toggleFillNone, type AlignMode,
+  alignNodes, distributeNodes, scaleNode, toggleFillNone, type AlignMode,
 } from "../core/arrange";
 import { anchorPoint, hitStack, nodeBounds, nodesBounds, snapPointToDoc, snapValue } from "../core/geometry";
 import { findHandleAt, moveHandle, nextGridLine, nextHandleId, nudgeHandle, toPath } from "../core/handles";
@@ -212,18 +212,34 @@ export function distributeSelection(
   return withDoc(s, distributeNodes(doc, s.selection, axis, gap), coalesceKey, now);
 }
 
+/** Scales the selection as ONE picture: every shape grows by the same factor and its
+ *  centre moves away from (or towards) the top-left corner of the selection's bounding
+ *  box, so the gaps between shapes scale with the shapes. The top-left corner stays
+ *  where it is, which keeps it on the grid. The longer side of the bounding box changes
+ *  by one grid step per call. */
 export function scaleSelection(s: EditorState, dir: 1 | -1, now?: number): EditorState {
   const doc = currentDoc(s);
   const ids = new Set(s.selection);
-  let changed = false;
+  const targets = doc.nodes.filter((n) => ids.has(n.id) && !n.locked);
+  const box = nodesBounds(targets);
+  if (!box) return s;
+  const L = Math.max(box.maxX - box.minX, box.maxY - box.minY);
+  const next = L + dir * doc.grid.size;
+  if (L <= 0 || next < doc.grid.size) return s;
+  const f = next / L;
+  const moved = new Set(targets.map((n) => n.id));
   const nodes = doc.nodes.map((n) => {
-    if (!ids.has(n.id) || n.locked) return n;
-    const f = scaleStepFactor(n, dir, doc.grid.size);
-    if (f === 1) return n;
-    changed = true;
-    return scaleNode(n, f);
+    if (!moved.has(n.id)) return n;
+    const scaled = scaleNode(n, f);
+    return {
+      ...scaled,
+      transform: {
+        ...scaled.transform,
+        x: box.minX + (n.transform.x - box.minX) * f,
+        y: box.minY + (n.transform.y - box.minY) * f,
+      },
+    };
   });
-  if (!changed) return s;
   return withDoc(s, { ...doc, nodes }, "scale", now);
 }
 

@@ -376,6 +376,28 @@ describe("rotate mode, scale and guides", () => {
     s = undoAction(s);
     expect(width(s)).toBe(80);
   });
+  it("scaleSelection scales a multi-selection as one picture, gaps included", () => {
+    // Two 80-wide rects: a spans -40..40, b spans 80..160. Gap 40, whole box 200 wide.
+    let s = stateWith([rect("a", 0, 0), rect("b", 120, 0)], ["a", "b"]);
+    s = scaleSelection(s, 1, 0); // 200 -> 220, factor 1.1
+    const [a, b] = currentDoc(s).nodes.map((n) => nodeBounds(n));
+    expect(a!.minX).toBeCloseTo(-40); // top-left corner of the selection stays put
+    expect(a!.minY).toBeCloseTo(-40);
+    expect(a!.maxX - a!.minX).toBeCloseTo(88);
+    expect(b!.maxX - b!.minX).toBeCloseTo(88);
+    expect(b!.minX - a!.maxX).toBeCloseTo(44); // the gap grew by the same factor
+    expect(b!.maxX).toBeCloseTo(180);
+    s = scaleSelection(s, -1, 10);
+    const [a2, b2] = currentDoc(s).nodes.map((n) => nodeBounds(n));
+    expect(b2!.minX - a2!.maxX).toBeCloseTo(40);
+    expect(b2!.maxX).toBeCloseTo(160);
+  });
+  it("scaleSelection keeps the top-left corner of a single shape on the grid", () => {
+    let s = stateWith([rect("a", 0, 0)], ["a"]);
+    s = scaleSelection(s, 1, 0);
+    const b = nodeBounds(primaryNode(s)!);
+    expect([b.minX, b.minY, b.maxX, b.maxY]).toEqual([-40, -40, 60, 60]);
+  });
   it("addGuideAtCursor commits and undoes", () => {
     let s = setCursor(createEditorState(), { x: 47, y: 10 });
     s = addGuideAtCursor(s, "v");
