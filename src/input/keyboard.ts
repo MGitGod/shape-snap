@@ -1,7 +1,7 @@
 import {
   addGuideAtCursor, convertToPath, cycleFocus, cycleHandle, cycleSelection, deleteSelection, duplicateSelection, escape, fitView,
-  gridCoarser, gridFiner, moveToCursor, nudge, placeShape, redoAction, reorderSelection, scaleSelection,
-  toggleFillNoneSelection, toggleLocked, toggleRotateMode, toggleMultiSelect, toggleSolo, toggleVisible, undoAction,
+  gridCoarser, gridFiner, finishLine, insertPointAtHandle, moveToCursor, nudge, placeShape, redoAction, reorderSelection,
+  scaleSelection, startLine, toggleCornerAtHandle, toggleSmooth, toggleFillNoneSelection, toggleLocked, toggleRotateMode, toggleMultiSelect, toggleSolo, toggleVisible, undoAction,
 } from "../editor/actions";
 import { dispatch, editorStore } from "../editor/store";
 import { findBinding, type ActionId } from "./keymap";
@@ -21,6 +21,10 @@ export function runAction(action: ActionId, viewport: Viewport): void {
       });
       break;
     }
+    case "line": dispatch(startLine); break;
+    case "smooth": dispatch((s) => toggleSmooth(s)); break;
+    case "corner-point": dispatch((s) => toggleCornerAtHandle(s)); break;
+    case "confirm": dispatch((s) => (s.drawing ? finishLine(s) : insertPointAtHandle(s))); break;
     case "prev-shape": dispatch((s) => cycleSelection(s, -1)); break;
     case "next-shape": dispatch((s) => cycleSelection(s, 1)); break;
     case "next-handle": dispatch(cycleHandle); break;
@@ -73,6 +77,8 @@ export function attachKeyboard(getViewport: () => Viewport): () => void {
     }
     const binding = findBinding(e.key);
     if (!binding) return;
+    // Enter on a focused button/link must still activate it
+    if (binding.action === "confirm" && e.target instanceof HTMLElement && e.target.closest("button, a, summary, [role=button]")) return;
     if (e.repeat && !binding.repeat) return;
     if (ARROWS.has(binding.action) && editorStore.getState().focusArea !== "canvas") return;
     e.preventDefault();

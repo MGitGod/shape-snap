@@ -13,6 +13,7 @@ const ALL_ACTIONS: ActionId[] = [
   "toggle-visible", "toggle-locked", "toggle-solo",
   "fit-view", "grid-finer", "grid-coarser",
   "scale-down", "scale-up", "rotate-mode", "fill-none", "to-path", "guide-h", "guide-v",
+  "line", "smooth", "corner-point", "confirm",
 ];
 
 function withShape(): EditorState {
@@ -69,7 +70,8 @@ describe("hintsFor", () => {
   it("handle held", () => {
     const h = hintsFor({ ...withShape(), heldHandle: "edge:0", multiSelect: true });
     expect(h[0]).toEqual({ keys: "クリック / 矢印 / Space", label: "つまみを動かす" });
-    expect(h[2]).toEqual({ keys: "右クリック / Esc", label: "つかむのをやめる" });
+    expect(h[2]).toEqual({ keys: "Enter", label: "点を足す" });
+    expect(h[3]).toEqual({ keys: "右クリック / Esc", label: "つかむのをやめる" });
   });
   it("prepends the notice", () => {
     const h = hintsFor({ ...createEditorState(), notice: "テスト" });
@@ -87,5 +89,25 @@ describe("stage 1.5 bindings", () => {
     for (const [k, a] of pairs) expect(findBinding(k)?.action).toBe(a);
     const h = hintsFor({ ...withShape(), rotateMode: true });
     expect(h.map((x) => x.label)).toEqual(["15°ずつ回す", "1°ずつ回す", "回転を終える"]);
+  });
+});
+
+describe("stage 2 line keys", () => {
+  it("finds l s / Enter", () => {
+    expect(findBinding("l")?.action).toBe("line");
+    expect(findBinding("S")?.action).toBe("smooth");
+    expect(findBinding("/")?.action).toBe("corner-point");
+    expect(findBinding("Enter")?.action).toBe("confirm");
+  });
+  it("shows drawing hints first", () => {
+    const empty = hintsFor({ ...createEditorState(), drawing: { points: [] } });
+    expect(empty[0]).toEqual({ keys: "グリッド点をクリック", label: "線を始める" });
+    const some = hintsFor({ ...createEditorState(), drawing: { points: [{ x: 0, y: 0 }] } });
+    expect(some.map((x) => x.keys)).toEqual(
+      ["クリック / Space", "Enter", "最初の点をクリック", "右クリック / Backspace", "Esc"],
+    );
+  });
+  it("adds L to the idle hints", () => {
+    expect(hintsFor(createEditorState()).map((x) => x.keys)).toContain("L");
   });
 });

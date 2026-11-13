@@ -2,12 +2,13 @@ import { commit, redo, undo } from "../core/history";
 import {
   alignNodes, distributeNodes, scaleNode, toggleFillNone, type AlignMode,
 } from "../core/arrange";
-import { anchorPoint, hitStack, nodeBounds, nodesBounds, snapPointToDoc, snapValue } from "../core/geometry";
+import { anchorPoint, hitStack, nodeBounds, nodesBounds, snapPointToDoc, snapValue, toWorld } from "../core/geometry";
 import { findHandleAt, moveHandle, nextGridLine, nextHandleId, nudgeHandle, toPath } from "../core/handles";
 import {
-  addGuide, addNode, clearGuides, createNode, duplicateNodes, removeGuide, removeNodes, reorderNode, setGrid, translateNodes, updateNode,
+  addGuide, addNode, clearGuides, createNode, createPathFromPoints, DEFAULT_STYLE, duplicateNodes, insertPathPoint, removeGuide,
+  removeNodes, removePathPoint, reorderNode, setGrid, setPathCorner, translateNodes, updateNode,
 } from "../core/model";
-import type { Anchor, Document, GridSettings, Point, SceneNode } from "../core/types";
+import type { Anchor, Document, GridSettings, PathNode, Point, SceneNode } from "../core/types";
 import {
   createEditorState, currentDoc, primaryNode, ZOOM_MAX, ZOOM_MIN, type EditorState,
 } from "./state";
@@ -85,6 +86,7 @@ function dist(a: Point, b: Point): number {
 export function placeShape(
   s: EditorState, kind: "rect" | "ellipse" | "polygon", fallbackCenter: Point, now?: number,
 ): EditorState {
+  if (s.drawing) return s;
   const doc = currentDoc(s);
   const at = snapPointToDoc(s.cursor ?? fallbackCenter, doc);
   const node = createNode(doc, kind, at);
@@ -97,12 +99,14 @@ export function placeShape(
 }
 
 export function escape(s: EditorState): EditorState {
+  if (s.drawing) return cancelLine(s);
   if (s.rotateMode) return { ...s, rotateMode: false, notice: null };
   if (s.heldHandle !== null) return { ...s, heldHandle: null, notice: null };
   return { ...s, selection: [], heldHandle: null, multiSelect: false, solo: false, rotateMode: false, notice: null };
 }
 
 export function clickCanvas(s: EditorState, p: Point, button: "left" | "right", opts: ClickOptions): EditorState {
+  if (s.drawing) return button === "left" ? addLinePoint(s, p, opts.handleTolerance) : undoLinePoint(s);
   if (button === "right") return escape(s);
   const doc = currentDoc(s);
   const primary = primaryNode(s);
@@ -142,13 +146,15 @@ export function clickCanvas(s: EditorState, p: Point, button: "left" | "right", 
   return s;
 }
 
-export function moveToCursor(s: EditorState, now?: number): EditorState {
+export function moveToCursor(s: EditorState, closeTolerance?: number, now?: number): EditorState {
   if (!s.cursor) return s;
+  if (s.drawing) return addLinePoint(s, s.cursor, closeTolerance ?? currentDoc(s).grid.size / 2);
   if (s.heldHandle !== null) return applyHeldHandle(s, s.cursor, now);
   return moveSelectionToPoint(s, s.cursor, now);
 }
 
 export function nudge(s: EditorState, dx: -1 | 0 | 1, dy: -1 | 0 | 1, now?: number): EditorState {
+  if (s.drawing) return panBy(s, -dx * 40, -dy * 40);
   const doc = currentDoc(s);
   const step = doc.grid.size;
   const node = primaryNode(s);
@@ -181,6 +187,7 @@ export function nudge(s: EditorState, dx: -1 | 0 | 1, dy: -1 | 0 | 1, now?: numb
 }
 
 export function convertToPath(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
   const doc = currentDoc(s);
   let next = doc;
   let changed = 0;
@@ -191,7 +198,7 @@ export function convertToPath(s: EditorState, now?: number): EditorState {
     next = updateNode(next, id, () => path);
     changed++;
   }
-  if (changed === 0) return { ...s, notice: "円は自由な形に変えられません（線の機能と一緒に入ります）" };
+  if (changed === 0) return { ...s, notice: "自由な形に変えられる図形を選んでください" };
   return { ...withDoc(s, next, undefined, now), heldHandle: null, notice: "自由な形に変えました（Z で戻せます）" };
 }
 
@@ -218,6 +225,7 @@ export function distributeSelection(
  *  where it is, which keeps it on the grid. The longer side of the bounding box changes
  *  by one grid step per call. */
 export function scaleSelection(s: EditorState, dir: 1 | -1, now?: number): EditorState {
+  if (s.drawing) return s;
   const doc = currentDoc(s);
   const ids = new Set(s.selection);
   const targets = doc.nodes.filter((n) => ids.has(n.id) && !n.locked);
@@ -244,12 +252,14 @@ export function scaleSelection(s: EditorState, dir: 1 | -1, now?: number): Edito
 }
 
 export function toggleRotateMode(s: EditorState): EditorState {
+  if (s.drawing) return s;
   if (s.rotateMode) return { ...s, rotateMode: false, notice: null };
   if (s.selection.length === 0) return { ...s, notice: "図形を選んでから V を押してください" };
   return { ...s, rotateMode: true, heldHandle: null, notice: null };
 }
 
 export function toggleFillNoneSelection(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
   const doc = currentDoc(s);
   const ids = new Set(s.selection);
   const nodes = doc.nodes.map((n) => (ids.has(n.id) && !n.locked ? toggleFillNone(n) : n));
@@ -282,6 +292,7 @@ export function clearGuidesAction(s: EditorState, now?: number): EditorState {
 }
 
 export function cycleSelection(s: EditorState, dir: 1 | -1): EditorState {
+  if (s.drawing) return s;
   const doc = currentDoc(s);
   const list = doc.nodes.filter((n) => n.visible && !n.locked && (!s.solo || s.selection.includes(n.id)));
   if (list.length === 0) return s;
@@ -292,16 +303,19 @@ export function cycleSelection(s: EditorState, dir: 1 | -1): EditorState {
 }
 
 export function cycleHandle(s: EditorState): EditorState {
+  if (s.drawing) return s;
   const node = primaryNode(s);
   if (!node || s.selection.length !== 1) return s;
   return { ...s, heldHandle: nextHandleId(node, s.heldHandle) };
 }
 
 export function toggleMultiSelect(s: EditorState): EditorState {
+  if (s.drawing) return s;
   return { ...s, multiSelect: !s.multiSelect, heldHandle: null };
 }
 
 export function duplicateSelection(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
   if (s.selection.length === 0) return s;
   const doc = currentDoc(s);
   const g = doc.grid.size;
@@ -311,7 +325,15 @@ export function duplicateSelection(s: EditorState, now?: number): EditorState {
 }
 
 export function deleteSelection(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return undoLinePoint(s);
   const doc = currentDoc(s);
+  const main = primaryNode(s);
+  if (main && main.kind === "path" && !main.locked && s.selection.length === 1 && s.heldHandle?.startsWith("vertex:")) {
+    const i = Number(s.heldHandle.slice(7));
+    const next = removePathPoint(main, i);
+    if (next === main) return { ...s, notice: "これ以上点を減らせません" };
+    return { ...withDoc(s, updateNode(doc, main.id, () => next), undefined, now), heldHandle: null };
+  }
   const ids = s.selection.filter((id) => {
     const n = doc.nodes.find((x) => x.id === id);
     return n !== undefined && !n.locked;
@@ -322,20 +344,24 @@ export function deleteSelection(s: EditorState, now?: number): EditorState {
 }
 
 export function undoAction(s: EditorState): EditorState {
+  if (s.drawing) return undoLinePoint(s);
   return normalize({ ...s, history: undo(s.history), heldHandle: null, notice: null });
 }
 
 export function redoAction(s: EditorState): EditorState {
+  if (s.drawing) return s;
   return normalize({ ...s, history: redo(s.history), heldHandle: null, notice: null });
 }
 
 export function reorderSelection(s: EditorState, dir: 1 | -1, now?: number): EditorState {
+  if (s.drawing) return s;
   const node = primaryNode(s);
   if (!node) return s;
   return withDoc(s, reorderNode(currentDoc(s), node.id, dir), undefined, now);
 }
 
 function toggleFlag(s: EditorState, key: "visible" | "locked", now?: number): EditorState {
+  if (s.drawing) return s;
   const node = primaryNode(s);
   if (!node) return s;
   const doc = updateNode(currentDoc(s), node.id, (n) => ({ ...n, [key]: !n[key] }) as SceneNode);
@@ -351,6 +377,7 @@ export function toggleLocked(s: EditorState, now?: number): EditorState {
 }
 
 export function toggleSolo(s: EditorState): EditorState {
+  if (s.drawing) return s;
   if (s.selection.length === 0) return s;
   return { ...s, solo: !s.solo };
 }
@@ -427,4 +454,129 @@ export function cycleFocus(s: EditorState): EditorState {
 export function loadDocument(s: EditorState, doc: Document): EditorState {
   const fresh = createEditorState(doc);
   return { ...fresh, rotateMode: false, view: s.view, anchor: s.anchor, focusArea: s.focusArea, cursor: s.cursor };
+}
+
+// ---- lines ------------------------------------------------------------
+
+export function startLine(s: EditorState): EditorState {
+  if (s.drawing) return s;
+  return {
+    ...s, drawing: { points: [] }, selection: [], heldHandle: null, rotateMode: false, multiSelect: false,
+    solo: false, focusArea: "canvas", notice: null,
+  };
+}
+
+export function addLinePoint(s: EditorState, p: Point, closeTolerance: number): EditorState {
+  if (!s.drawing) return s;
+  const q = snapPointToDoc(p, currentDoc(s));
+  const pts = s.drawing.points;
+  const first = pts[0];
+  if (pts.length >= 3 && first && dist(q, first) <= closeTolerance) return finishLine(s, true);
+  const last = pts[pts.length - 1];
+  if (last && last.x === q.x && last.y === q.y) return s;
+  return { ...s, drawing: { points: [...pts, q] }, notice: null };
+}
+
+export function undoLinePoint(s: EditorState): EditorState {
+  if (!s.drawing) return s;
+  if (s.drawing.points.length === 0) return cancelLine(s);
+  return { ...s, drawing: { points: s.drawing.points.slice(0, -1) }, notice: null };
+}
+
+export function finishLine(s: EditorState, closed = false, now?: number): EditorState {
+  if (!s.drawing) return s;
+  const pts = s.drawing.points;
+  if (pts.length < 2) return { ...s, notice: "点を 2 つ以上クリックしてください" };
+  const doc = currentDoc(s);
+  const node = createPathFromPoints(doc, pts, closed && pts.length >= 3);
+  return {
+    ...withDoc(s, addNode(doc, node), undefined, now),
+    selection: [node.id], heldHandle: null, drawing: null, notice: null, focusArea: "canvas",
+  };
+}
+
+export function cancelLine(s: EditorState): EditorState {
+  if (!s.drawing) return s;
+  return { ...s, drawing: null, notice: null };
+}
+
+const NEED_PATH_NOTICE = "線か自由な形を選んでください（四角と多角形は J で自由な形に変えられます）";
+
+export function toggleSmooth(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
+  const doc = currentDoc(s);
+  const ids = s.selection.filter((id) => {
+    const n = doc.nodes.find((x) => x.id === id);
+    return n !== undefined && n.kind === "path" && !n.locked;
+  });
+  if (ids.length === 0) return { ...s, notice: NEED_PATH_NOTICE };
+  let next = doc;
+  for (const id of ids) {
+    next = updateNode(next, id, (n) => {
+      const p = n as PathNode;
+      return p.smooth
+        ? { ...p, smooth: false, points: p.points.map((pt) => ({ ...pt, corner: false })) }
+        : { ...p, smooth: true };
+    });
+  }
+  const moved = withDoc(s, next, undefined, now);
+  const main = primaryNode(moved);
+  const lostEdges = main?.kind === "path" && main.smooth && s.heldHandle?.startsWith("edge:");
+  return { ...moved, heldHandle: lostEdges ? null : moved.heldHandle, notice: null };
+}
+
+export function toggleClosed(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
+  const node = primaryNode(s);
+  if (!node || node.kind !== "path" || node.locked) return { ...s, notice: NEED_PATH_NOTICE };
+  if (!node.closed) {
+    if (node.points.length < 3) return { ...s, notice: "閉じるには点が 3 つ以上要ります" };
+    const next: PathNode = {
+      ...node, closed: true, style: { ...node.style, fill: node.style.fill ?? node.style.stroke ?? DEFAULT_STYLE.fill },
+    };
+    return withDoc(s, updateNode(currentDoc(s), node.id, () => next), undefined, now);
+  }
+  const next: PathNode = {
+    ...node, closed: false,
+    style: {
+      ...node.style, fill: null, stroke: node.style.stroke ?? node.style.fill,
+      strokeWidth: Math.max(node.style.strokeWidth, 2),
+    },
+  };
+  return { ...withDoc(s, updateNode(currentDoc(s), node.id, () => next), undefined, now), heldHandle: null };
+}
+
+export function toggleCornerAtHandle(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
+  const node = primaryNode(s);
+  const need = { ...s, notice: "曲線の点（丸いつまみ）をつかんでから押してください" };
+  if (!node || node.kind !== "path" || !node.smooth || node.locked || s.heldHandle === null) return need;
+  if (!s.heldHandle.startsWith("vertex:")) return need;
+  const i = Number(s.heldHandle.slice(7));
+  const pt = node.points[i];
+  if (!pt) return need;
+  return withDoc(s, updateNode(currentDoc(s), node.id, () => setPathCorner(node, i, !pt.corner)), undefined, now);
+}
+
+export function insertPointAtHandle(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
+  const node = primaryNode(s);
+  if (!node || node.locked || s.heldHandle === null || !s.heldHandle.startsWith("edge:")) return s;
+  if (node.kind !== "path" && node.kind !== "polygon" && node.kind !== "rect") return s;
+  const path = node.kind === "path" ? node : toPath(node);
+  if (!path) return s;
+  const i = Number(s.heldHandle.slice(5));
+  const a = path.points[i];
+  const b = path.points[(i + 1) % path.points.length];
+  if (!a || !b) return s;
+  const doc = currentDoc(s);
+  const mid = toWorld(path, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const next = insertPathPoint(path, i, snapPointToDoc(mid, doc));
+  return { ...withDoc(s, updateNode(doc, node.id, () => next), undefined, now), heldHandle: `vertex:${i + 1}` };
+}
+
+export function setTension(s: EditorState, v: number, now?: number): EditorState {
+  const node = primaryNode(s);
+  if (!node || node.kind !== "path") return s;
+  return setNodeProp(s, node.id, { tension: Math.min(1, Math.max(0, v)) } as Partial<SceneNode>, "prop:tension", now);
 }

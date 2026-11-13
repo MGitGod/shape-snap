@@ -1,6 +1,7 @@
-import type { EditorState } from "../editor/state";
+import { primaryNode, type EditorState } from "../editor/state";
 
 export type ActionId =
+  | "line" | "smooth" | "corner-point" | "confirm"
   | "place-rect" | "place-ellipse" | "place-polygon"
   | "prev-shape" | "next-shape" | "next-handle" | "multi-select" | "escape" | "cycle-focus"
   | "move-up" | "move-down" | "move-left" | "move-right" | "move-to-cursor"
@@ -22,6 +23,7 @@ const b = (
 ): KeyBinding => ({ key, action, label, group, repeat });
 
 export const KEYMAP: KeyBinding[] = [
+  b("l", "line", "線", "置く"),
   b("r", "place-rect", "四角を置く", "置く"),
   b("c", "place-ellipse", "円を置く", "置く"),
   b("p", "place-polygon", "多角形を置く", "置く"),
@@ -54,6 +56,9 @@ export const KEYMAP: KeyBinding[] = [
   b("v", "rotate-mode", "回転", "動かす"),
   b("n", "fill-none", "塗りなし", "編集"),
   b("j", "to-path", "自由な形に変える", "編集"),
+  b("s", "smooth", "曲線", "編集"),
+  b("/", "corner-point", "点を角にする", "編集"),
+  b("Enter", "confirm", "確定", "選ぶ"),
   b("-", "guide-h", "横のガイド", "見る"),
   b("i", "guide-v", "縦のガイド", "見る"),
 ];
@@ -82,14 +87,37 @@ export interface Hint { keys: string; label: string }
 
 const h = (keys: string, label: string): Hint => ({ keys, label });
 
+function drawingHints(s: EditorState): Hint[] {
+  const start = s.drawing && s.drawing.points.length === 0 ? [h("グリッド点をクリック", "線を始める")] : [];
+  return [
+    ...start,
+    h("クリック / Space", "点を足す"),
+    h("Enter", "確定"),
+    h("最初の点をクリック", "閉じて確定"),
+    h("右クリック / Backspace", "一つ戻す"),
+    h("Esc", "やめる"),
+  ];
+}
+
 function baseHints(s: EditorState): Hint[] {
+  if (s.drawing) return drawingHints(s);
   if (s.rotateMode) {
     return [h("← →", "15°ずつ回す"), h("↑ ↓", "1°ずつ回す"), h("V / Esc", "回転を終える")];
   }
   if (s.heldHandle !== null) {
+    const node = primaryNode(s);
+    const extra: Hint[] = [];
+    if (node && s.heldHandle.startsWith("edge:") && (node.kind === "path" || node.kind === "polygon" || node.kind === "rect")) {
+      extra.push(h("Enter", "点を足す"));
+    }
+    if (node && node.kind === "path" && s.heldHandle.startsWith("vertex:")) {
+      if (node.smooth) extra.push(h("/", "角にする・丸める"));
+      extra.push(h("Delete", "点を消す"));
+    }
     return [
       h("クリック / 矢印 / Space", "つまみを動かす"),
       h("W", "次のつまみ"),
+      ...extra,
       h("右クリック / Esc", "つかむのをやめる"),
     ];
   }
@@ -100,8 +128,10 @@ function baseHints(s: EditorState): Hint[] {
     ];
   }
   if (s.selection.length > 0) {
+    const main = primaryNode(s);
     return [
       h("つまみをクリック", "つかむ"),
+      ...(main && main.kind === "path" ? [h("S", "曲線・直線")] : []),
       h("何もない点をクリック / Space / 矢印", "動かす"),
       h("W", "つまみ"),
       h("V", "回転"),
@@ -115,6 +145,7 @@ function baseHints(s: EditorState): Hint[] {
     h("R", "四角"),
     h("C", "円"),
     h("P", "多角形"),
+    h("L", "線"),
     h("図形をクリック / Q / E", "選ぶ"),
     h("ホイール", "拡大縮小"),
     h("矢印", "表示を動かす"),

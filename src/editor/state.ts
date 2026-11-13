@@ -20,6 +20,7 @@ export interface EditorState {
   anchor: Anchor;
   lastClick: Point | null;
   notice: string | null;
+  drawing: { points: Point[] } | null;   // a line being drawn: world points, already snapped
 }
 
 export function createEditorState(doc?: Document): EditorState {
@@ -36,6 +37,7 @@ export function createEditorState(doc?: Document): EditorState {
     anchor: "auto",
     lastClick: null,
     notice: null,
+    drawing: null,
   };
 }
 
