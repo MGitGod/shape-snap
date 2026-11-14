@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "idb-keyval": "^6.3.0",
+    "paper": "^0.17.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zustand": "^5.1.0"

@@ -2,7 +2,7 @@ import { snapValue, toLocal } from "./geometry";
 import { flattenNode, sourceBounds, translateNode } from "./tree";
 import {
   GRID_MAX, GRID_MIN,
-  type Document, type GridSettings, type Guide, type LeafNode, type NodeKind, type PathNode, type Point, type SceneNode, type Style,
+  type Document, type GridSettings, type Guide, type LeafNode, type NodeKind, type PathNode, type Point, type Role, type SceneNode, type Style,
 } from "./types";
 
 export const DEFAULT_STYLE: Style = { fill: "#1d2330", stroke: null, strokeWidth: 2, opacity: 1 };
@@ -277,4 +277,10 @@ export function wrapMirror(doc: Document, id: string, wrapperId?: string): { doc
       axisX: snapValue(b.maxX, g) + g, axisY: snapValue((b.minY + b.maxY) / 2, g),
     };
   });
+}
+
+/** Give the listed top-level shapes the add or subtract role. */
+export function setRole(doc: Document, ids: string[], role: Role): Document {
+  const set = new Set(ids);
+  return { ...doc, nodes: doc.nodes.map((n) => (set.has(n.id) && n.role !== role ? { ...n, role } : n)) };
 }
