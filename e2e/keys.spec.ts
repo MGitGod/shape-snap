@@ -146,3 +146,19 @@ test("the dialog buttons are 40px or taller and the toolbar stays short", async 
   await page.locator('[data-key-reset="place-rect"]').click();
   await closeKeys(page);
 });
+
+test("notices and the combine badge show the live keys", async ({ page }) => {
+  await start(page);
+  await openKeys(page);
+  await assign(page, "undo", "9");
+  await assign(page, "combine-view", "8");
+  await closeKeys(page);
+  await overCanvas(page);
+  await page.keyboard.press("r");
+  await page.keyboard.press("j");
+  const hints = page.locator(".key-hints");
+  await expect(hints).toContainText("自由な形に変えました（9 で戻せます）");
+  await expect(hints).not.toContainText("Z で");
+  await page.keyboard.press("8");
+  await expect(page.getByText("結合を表示中（8 で戻る）")).toBeVisible();
+});

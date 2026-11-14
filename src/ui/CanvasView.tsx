@@ -8,6 +8,8 @@ import type { Point } from "../core/types";
 import { clickCanvas, failCombine, fitView, setCursor, zoomAt } from "../editor/actions";
 import { currentDoc } from "../editor/state";
 import { dispatch, editorStore, useEditor } from "../editor/store";
+import { resolveKeys } from "../input/keymap";
+import { useKeymap } from "../input/keymapStore";
 import { itemToSvg, nodeToSvgList, type SvgElementSpec } from "../render/svg";
 
 const HANDLE_PX = 14;
@@ -45,6 +47,7 @@ function outlinePoints(points: Point[]): string {
 }
 
 export function CanvasView() {
+  const keymap = useKeymap();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const doc = useEditor((s) => currentDoc(s));
   const view = useEditor((s) => s.view);
@@ -391,7 +394,7 @@ export function CanvasView() {
       {combineView && (
         <g data-testid="combine-badge" pointerEvents="none">
           <rect x={12} y={12} width={196} height={28} rx={6} fill="var(--panel)" stroke="var(--accent)" strokeWidth={1.5} />
-          <text x={22} y={31} fill="var(--ink)" fontSize={14} fontWeight={700}>結合を表示中（3 で戻る）</text>
+          <text x={22} y={31} fill="var(--ink)" fontSize={14} fontWeight={700}>{resolveKeys("結合を表示中（{{combine-view}} で戻る）", keymap)}</text>
         </g>
       )}
     </svg>

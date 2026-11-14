@@ -181,6 +181,14 @@ export function keyLabel(key: string): string {
   return key.length === 1 ? key.toUpperCase() : key;
 }
 
+/** Replace `{{action-id}}` tokens with the live key label; unknown ids are left as they are. */
+export function resolveKeys(text: string, map: KeyBinding[]): string {
+  return text.replace(/\{\{([a-z-]+)\}\}/g, (whole, id: string) => {
+    const key = keyFor(map, id as ActionId);
+    return key === "" ? whole : keyLabel(key);
+  });
+}
+
 export interface Hint { keys: string; label: string }
 
 const h = (keys: string, label: string): Hint => ({ keys, label });
@@ -266,5 +274,5 @@ export function hintsFor(s: EditorState, map: KeyBinding[] = DEFAULT_KEYMAP): Hi
   const k: Keys = (action) => keyLabel(keyFor(map, action));
   const base = baseHints(s, k);
   const hints = s.combineView ? [h(k("combine-view"), "結合の表示を終える"), ...base] : base;
-  return s.notice ? [{ keys: "", label: s.notice }, ...hints] : hints;
+  return s.notice ? [{ keys: "", label: resolveKeys(s.notice, map) }, ...hints] : hints;
 }

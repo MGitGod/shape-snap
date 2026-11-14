@@ -157,7 +157,7 @@ describe("smoothing and closing", () => {
   it("toggleSmooth on a rect only gives a notice", () => {
     const doc = addNode(createDocument(), createNode(createDocument(), "rect", { x: 0, y: 0 }, "a"));
     const s = toggleSmooth({ ...createEditorState(doc), selection: ["a"] });
-    expect(s.notice).toBe("線か自由な形を選んでください（四角と多角形は J で自由な形に変えられます）");
+    expect(s.notice).toBe("線か自由な形を選んでください（四角と多角形は {{to-path}} で自由な形に変えられます）");
     expect(s.history.past).toHaveLength(0);
   });
 

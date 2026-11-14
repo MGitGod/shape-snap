@@ -367,7 +367,7 @@ describe("rotate mode, scale and guides", () => {
   it("does not enter rotate mode without a selection", () => {
     const s = toggleRotateMode(stateWith([rect("a", 0, 0)]));
     expect(s.rotateMode).toBe(false);
-    expect(s.notice).toBe("図形を選んでから V を押してください");
+    expect(s.notice).toBe("図形を選んでから {{rotate-mode}} を押してください");
   });
   it("scaleSelection undoes in one step", () => {
     const width = (s: EditorState) => nodeBounds(primaryNode(s)!).maxX - nodeBounds(primaryNode(s)!).minX;
@@ -430,7 +430,7 @@ describe("toggleRole", () => {
   });
   it("asks for a selection", () => {
     const s = toggleRole(stateWith([rect("a", 0, 0)]));
-    expect(s.notice).toBe("図形を選んでから T を押してください");
+    expect(s.notice).toBe("図形を選んでから {{role}} を押してください");
     expect(s.history.past).toHaveLength(0);
   });
   it("leaves a locked shape alone", () => {

@@ -20,8 +20,8 @@ import {
 
 export interface ClickOptions { hitTolerance: number; handleTolerance: number; now?: number }
 
-const KIND_CHANGED_NOTICE = "自由な形に変わりました（Z で戻せます）";
-const GROUP_EDIT_NOTICE = "グループの中の図形は、解いてから直してください";
+const KIND_CHANGED_NOTICE = "自由な形に変わりました（{{undo}} で戻せます）";
+const GROUP_EDIT_NOTICE = "グループの中の図形は、解いてから直してください（{{ungroup}}）";
 
 /** Union of the source bounds (copies are not counted) of the given nodes. */
 function sourceUnion(nodes: SceneNode[]): Bounds | null {
@@ -225,10 +225,10 @@ export function convertToPath(s: EditorState, now?: number): EditorState {
   if (changed === 0) {
     return { ...s, notice: sawGroup ? GROUP_EDIT_NOTICE : "自由な形に変えられる図形を選んでください" };
   }
-  return { ...withDoc(s, next, undefined, now), heldHandle: null, notice: "自由な形に変えました（Z で戻せます）" };
+  return { ...withDoc(s, next, undefined, now), heldHandle: null, notice: "自由な形に変えました（{{undo}} で戻せます）" };
 }
 
-const NEED_TWO_NOTICE = "2 個以上の図形を選んでください（M で複数選択）";
+const NEED_TWO_NOTICE = "2 個以上の図形を選んでください（{{multi-select}} で複数選択）";
 
 export function alignSelection(s: EditorState, mode: AlignMode, now?: number): EditorState {
   if (s.selection.length < 2) return { ...s, notice: NEED_TWO_NOTICE };
@@ -272,7 +272,7 @@ export function scaleSelection(s: EditorState, dir: 1 | -1, now?: number): Edito
 export function toggleRotateMode(s: EditorState): EditorState {
   if (s.drawing) return s;
   if (s.rotateMode) return { ...s, rotateMode: false, notice: null };
-  if (s.selection.length === 0) return { ...s, notice: "図形を選んでから V を押してください" };
+  if (s.selection.length === 0) return { ...s, notice: "図形を選んでから {{rotate-mode}} を押してください" };
   return { ...s, rotateMode: true, heldHandle: null, notice: null };
 }
 
@@ -537,7 +537,7 @@ export function cancelLine(s: EditorState): EditorState {
   return { ...s, drawing: null, notice: null };
 }
 
-const NEED_PATH_NOTICE = "線か自由な形を選んでください（四角と多角形は J で自由な形に変えられます）";
+const NEED_PATH_NOTICE = "線か自由な形を選んでください（四角と多角形は {{to-path}} で自由な形に変えられます）";
 
 function editablePath(n: SceneNode | undefined): PathNode | null {
   const leaf = n ? editableLeaf(n) : null;
@@ -671,7 +671,7 @@ export function ungroupSelection(s: EditorState, now?: number): EditorState {
   if (!any) return { ...s, notice: "グループ・連続配置・対称を選んでください" };
   return {
     ...withDoc(s, doc, undefined, now), selection: ids, heldHandle: null, multiSelect: false, rotateMode: false,
-    notice: sawGenerated ? "ばらしました（Z で戻せます）" : null,
+    notice: sawGenerated ? "ばらしました（{{undo}} で戻せます）" : null,
   };
 }
 
@@ -711,7 +711,7 @@ export function setMirrorMode(s: EditorState, mode: MirrorMode, now?: number): E
 
 export function toggleRole(s: EditorState, now?: number): EditorState {
   if (s.drawing) return s;
-  if (s.selection.length === 0) return { ...s, notice: "図形を選んでから T を押してください" };
+  if (s.selection.length === 0) return { ...s, notice: "図形を選んでから {{role}} を押してください" };
   const doc = currentDoc(s);
   const picked = doc.nodes.filter((n) => s.selection.includes(n.id) && !n.locked);
   const top = picked[picked.length - 1];
@@ -719,7 +719,7 @@ export function toggleRole(s: EditorState, now?: number): EditorState {
   const role = top.role === "subtract" ? "add" : "subtract";
   return {
     ...withDoc(s, setRole(doc, [top.id], role), undefined, now),
-    notice: role === "subtract" ? "抜く図形にしました。奥にある図形をくり抜きます（3 で結合を表示）" : null,
+    notice: role === "subtract" ? "抜く図形にしました。奥にある図形をくり抜きます（{{combine-view}} で結合を表示）" : null,
   };
 }
 

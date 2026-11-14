@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useEditor } from "./editor/store";
 import { attachKeyboard } from "./input/keyboard";
+import { resolveKeys } from "./input/keymap";
+import { useKeymap } from "./input/keymapStore";
 import { exportWorkFile, startSession, useWork } from "./io/session";
 import { Banner } from "./ui/Banner";
 import { CanvasView } from "./ui/CanvasView";
@@ -22,6 +24,7 @@ function canvasViewport(): { width: number; height: number } {
 export function App() {
   const focusArea = useEditor((s) => s.focusArea);
   const notice = useEditor((s) => s.notice);
+  const keymap = useKeymap();
   const ready = useWork((s) => s.ready);
   const saveError = useWork((s) => s.saveError);
   const [dialog, setDialog] = useState<"works" | "export" | "keys" | null>(null);
@@ -56,7 +59,7 @@ export function App() {
           onAction={exportWorkFile}
         />
       )}
-      {notice !== null && notice.startsWith("結合できませんでした") && <Banner message={notice} />}
+      {notice !== null && notice.startsWith("結合できませんでした") && <Banner message={resolveKeys(notice, keymap)} />}
       {dialog === "works" && <WorksMenu onClose={closeDialog} />}
       {dialog === "keys" && <KeysDialog onClose={closeDialog} />}
       {dialog === "export" && <ExportDialog onClose={closeDialog} />}

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEditorState } from "../../src/editor/state";
 import {
   DEFAULT_KEYMAP, FIXED_KEYS, applyOverrides, findBindingIn, hintsFor, isAssignableKey, keyFor,
-  normalizeKey, rebind, sanitizeOverrides, type ActionId, type KeyOverrides,
+  normalizeKey, rebind, resolveKeys, sanitizeOverrides, type ActionId, type KeyOverrides,
 } from "../../src/input/keymap";
 import {
   KEYS_STORAGE_KEY, keymapStore, loadKeymap, rebindKey, resetAllKeys, resetKey,
@@ -185,5 +185,25 @@ describe("keymapStore", () => {
     expect(r.error).toBeNull();
     expect(keyFor(keymapStore.getState().map, "place-rect")).toBe(";");
     expect(keymapStore.getState().saveError).toBe(true);
+  });
+});
+
+describe("resolveKeys", () => {
+  it("replaces tokens with the default keys", () => {
+    expect(resolveKeys("戻す（{{undo}} で戻せます）", DEFAULT_KEYMAP)).toBe("戻す（Z で戻せます）");
+    expect(resolveKeys("{{combine-view}} と {{multi-select}}", DEFAULT_KEYMAP)).toBe("3 と M");
+  });
+  it("uses a rebound map", () => {
+    const map = applyOverrides(DEFAULT_KEYMAP, { undo: ";" });
+    expect(resolveKeys("（{{undo}} で戻せます）", map)).toBe("（; で戻せます）");
+  });
+  it("leaves unknown tokens and plain text alone", () => {
+    expect(resolveKeys("{{nope}} と {{undo}", DEFAULT_KEYMAP)).toBe("{{nope}} と {{undo}");
+    expect(resolveKeys("そのまま", DEFAULT_KEYMAP)).toBe("そのまま");
+  });
+  it("is applied to the notice in hintsFor", () => {
+    const map = applyOverrides(DEFAULT_KEYMAP, { undo: ";" });
+    const h = hintsFor({ ...createEditorState(), notice: "戻せます（{{undo}}）" }, map);
+    expect(h[0]).toEqual({ keys: "", label: "戻せます（;）" });
   });
 });
