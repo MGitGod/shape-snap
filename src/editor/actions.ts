@@ -2,14 +2,17 @@ import { commit, redo, undo } from "../core/history";
 import {
   alignNodes, distributeNodes, toggleFillNone, type AlignMode,
 } from "../core/arrange";
-import { anchorPoint, hitStack, nodeBounds, nodesBounds, snapPointToDoc, snapValue, toWorld } from "../core/geometry";
+import { anchorPoint, hitStack, nodesBounds, snapPointToDoc, snapValue, toWorld, type Bounds } from "../core/geometry";
 import { findHandleAt, moveHandle, nextGridLine, nextHandleId, nudgeHandle, toPath } from "../core/handles";
 import {
-  addGuide, addNode, clearGuides, createNode, createPathFromPoints, DEFAULT_STYLE, duplicateNodes, insertPathPoint, removeGuide,
-  removeNodes, removePathPoint, reorderNode, setGrid, setPathCorner, translateNodes, updateNode,
+  addGuide, addNode, clearGuides, createNode, createPathFromPoints, DEFAULT_STYLE, duplicateNodes, groupNodes, insertPathPoint,
+  removeGuide, removeNodes, removePathPoint, reorderNode, setGrid, setPathCorner, translateNodes, ungroupNode, updateNode,
+  wrapMirror, wrapRepeat,
 } from "../core/model";
-import { nodeCenter, rotateNodeAbout, scaleNodeAbout } from "../core/tree";
-import type { Anchor, Document, GridSettings, PathNode, Point, SceneNode } from "../core/types";
+import {
+  editableLeaf, mapSourceLeaves, nodeCenter, rotateNodeAbout, scaleNodeAbout, sourceBounds, withEditableLeaf,
+} from "../core/tree";
+import type { Anchor, Document, GridSettings, LeafNode, MirrorMode, PathNode, Point, SceneNode, Style } from "../core/types";
 import {
   createEditorState, currentDoc, primaryNode, ZOOM_MAX, ZOOM_MIN, type EditorState,
 } from "./state";
@@ -17,6 +20,19 @@ import {
 export interface ClickOptions { hitTolerance: number; handleTolerance: number; now?: number }
 
 const KIND_CHANGED_NOTICE = "自由な形に変わりました（Z で戻せます）";
+const GROUP_EDIT_NOTICE = "グループの中の図形は、解いてから直してください（U）";
+
+/** Union of the source bounds (copies are not counted) of the given nodes. */
+function sourceUnion(nodes: SceneNode[]): Bounds | null {
+  if (nodes.length === 0) return null;
+  const all = nodes.map(sourceBounds);
+  return {
+    minX: Math.min(...all.map((b) => b.minX)),
+    minY: Math.min(...all.map((b) => b.minY)),
+    maxX: Math.max(...all.map((b) => b.maxX)),
+    maxY: Math.max(...all.map((b) => b.maxY)),
+  };
+}
 
 // ---- helpers ----------------------------------------------------------
 
@@ -56,7 +72,7 @@ function moveSelectionToPoint(s: EditorState, p: Point, now?: number): EditorSta
   let dy: number;
   if (s.anchor === "auto") {
     // centre the primary shape on the click, then slide it so its top-left lands on grid lines
-    const b = nodeBounds(node);
+    const b = sourceBounds(node);
     const c = nodeCenter(node);
     dx = p.x - c.x;
     dy = p.y - c.y;
@@ -178,7 +194,7 @@ export function nudge(s: EditorState, dx: -1 | 0 | 1, dy: -1 | 0 | 1, now?: numb
     let my = dy * step;
     if (doc.grid.snap && node) {
       // move the bounding box to the next grid line, not by a fixed amount
-      const b = nodeBounds(node);
+      const b = sourceBounds(node);
       if (dx !== 0) mx = nextGridLine(b.minX, dx, step) - b.minX;
       if (dy !== 0) my = nextGridLine(b.minY, dy, step) - b.minY;
     }
@@ -192,14 +208,22 @@ export function convertToPath(s: EditorState, now?: number): EditorState {
   const doc = currentDoc(s);
   let next = doc;
   let changed = 0;
+  let sawGroup = false;
   for (const id of s.selection) {
     const node = doc.nodes.find((n) => n.id === id);
-    const path = node ? toPath(node) : null;
-    if (!path) continue;
-    next = updateNode(next, id, () => path);
+    if (!node || node.locked) continue;
+    const leaf = editableLeaf(node);
+    const path = leaf ? toPath(leaf) : null;
+    if (!path) {
+      if (node.kind === "group") sawGroup = true;
+      continue;
+    }
+    next = updateNode(next, id, (n) => withEditableLeaf(n, (l) => toPath(l) ?? l));
     changed++;
   }
-  if (changed === 0) return { ...s, notice: "自由な形に変えられる図形を選んでください" };
+  if (changed === 0) {
+    return { ...s, notice: sawGroup ? GROUP_EDIT_NOTICE : "自由な形に変えられる図形を選んでください" };
+  }
   return { ...withDoc(s, next, undefined, now), heldHandle: null, notice: "自由な形に変えました（Z で戻せます）" };
 }
 
@@ -230,7 +254,7 @@ export function scaleSelection(s: EditorState, dir: 1 | -1, now?: number): Edito
   const doc = currentDoc(s);
   const ids = new Set(s.selection);
   const targets = doc.nodes.filter((n) => ids.has(n.id) && !n.locked);
-  const box = nodesBounds(targets);
+  const box = sourceUnion(targets);
   if (!box) return s;
   const L = Math.max(box.maxX - box.minX, box.maxY - box.minY);
   const next = L + dir * doc.grid.size;
@@ -258,6 +282,16 @@ export function toggleFillNoneSelection(s: EditorState, now?: number): EditorSta
   const nodes = doc.nodes.map((n) => (ids.has(n.id) && !n.locked ? toggleFillNone(n) : n));
   if (s.selection.length === 0) return s;
   return withDoc(s, { ...doc, nodes }, undefined, now);
+}
+
+/** Applies a style patch to every source leaf of the node (copies follow their source). */
+export function setLeafStyle(
+  s: EditorState, id: string, patch: Partial<Style>, coalesceKey: string, now?: number,
+): EditorState {
+  const doc = currentDoc(s);
+  if (!doc.nodes.some((n) => n.id === id)) return s;
+  const apply = (leaf: LeafNode): LeafNode => ({ ...leaf, style: { ...leaf.style, ...patch } });
+  return withDoc(s, updateNode(doc, id, (n) => mapSourceLeaves(n, apply)), coalesceKey, now);
 }
 
 /** `at` is used when the cursor is not over the canvas (e.g. the panel buttons): the
@@ -321,11 +355,12 @@ export function deleteSelection(s: EditorState, now?: number): EditorState {
   if (s.drawing) return undoLinePoint(s);
   const doc = currentDoc(s);
   const main = primaryNode(s);
-  if (main && main.kind === "path" && !main.locked && s.selection.length === 1 && s.heldHandle?.startsWith("vertex:")) {
+  const mainLeaf = main ? editableLeaf(main) : null;
+  if (main && mainLeaf && mainLeaf.kind === "path" && !main.locked && s.selection.length === 1 && s.heldHandle?.startsWith("vertex:")) {
     const i = Number(s.heldHandle.slice(7));
-    const next = removePathPoint(main, i);
-    if (next === main) return { ...s, notice: "これ以上点を減らせません" };
-    return { ...withDoc(s, updateNode(doc, main.id, () => next), undefined, now), heldHandle: null };
+    const next = removePathPoint(mainLeaf, i);
+    if (next === mainLeaf) return { ...s, notice: "これ以上点を減らせません" };
+    return { ...withDoc(s, updateNode(doc, main.id, (n) => withEditableLeaf(n, () => next)), undefined, now), heldHandle: null };
   }
   const ids = s.selection.filter((id) => {
     const n = doc.nodes.find((x) => x.id === id);
@@ -384,7 +419,15 @@ export function setNodeProp(
 ): EditorState {
   const doc = currentDoc(s);
   if (!doc.nodes.some((n) => n.id === id)) return s;
-  return withDoc(s, updateNode(doc, id, (n) => ({ ...n, ...patch }) as SceneNode), coalesceKey, now);
+  return withDoc(s, updateNode(doc, id, (n) => {
+    const merged = { ...n, ...patch } as SceneNode;
+    if ((merged.kind === "repeat" || merged.kind === "mirror") && "count" in patch) {
+      const max = merged.kind === "repeat" ? 50 : 36;
+      const c = Math.round(Number(merged.count));
+      return { ...merged, count: Math.min(max, Math.max(2, Number.isFinite(c) ? c : 2)) };
+    }
+    return merged;
+  }), coalesceKey, now);
 }
 
 export function setGridProp(
@@ -495,68 +538,82 @@ export function cancelLine(s: EditorState): EditorState {
 
 const NEED_PATH_NOTICE = "線か自由な形を選んでください（四角と多角形は J で自由な形に変えられます）";
 
+function editablePath(n: SceneNode | undefined): PathNode | null {
+  const leaf = n ? editableLeaf(n) : null;
+  return leaf && leaf.kind === "path" ? leaf : null;
+}
+
 export function toggleSmooth(s: EditorState, now?: number): EditorState {
   if (s.drawing) return s;
   const doc = currentDoc(s);
-  const ids = s.selection.filter((id) => {
-    const n = doc.nodes.find((x) => x.id === id);
-    return n !== undefined && n.kind === "path" && !n.locked;
-  });
-  if (ids.length === 0) return { ...s, notice: NEED_PATH_NOTICE };
+  const nodes = s.selection
+    .map((id) => doc.nodes.find((x) => x.id === id))
+    .filter((n): n is SceneNode => n !== undefined && !n.locked && editablePath(n) !== null);
+  if (nodes.length === 0) {
+    const group = s.selection.some((id) => doc.nodes.find((x) => x.id === id)?.kind === "group");
+    return { ...s, notice: group ? GROUP_EDIT_NOTICE : NEED_PATH_NOTICE };
+  }
   let next = doc;
-  for (const id of ids) {
-    next = updateNode(next, id, (n) => {
-      const p = n as PathNode;
-      return p.smooth
-        ? { ...p, smooth: false, points: p.points.map((pt) => ({ ...pt, corner: false })) }
-        : { ...p, smooth: true };
-    });
+  for (const node of nodes) {
+    next = updateNode(next, node.id, (n) => withEditableLeaf(n, (leaf) => {
+      if (leaf.kind !== "path") return leaf;
+      return leaf.smooth
+        ? { ...leaf, smooth: false, points: leaf.points.map((pt) => ({ ...pt, corner: false })) }
+        : { ...leaf, smooth: true };
+    }));
   }
   const moved = withDoc(s, next, undefined, now);
-  const main = primaryNode(moved);
-  const lostEdges = main?.kind === "path" && main.smooth && s.heldHandle?.startsWith("edge:");
+  const mainPath = editablePath(primaryNode(moved));
+  const lostEdges = mainPath?.smooth && s.heldHandle?.startsWith("edge:");
   return { ...moved, heldHandle: lostEdges ? null : moved.heldHandle, notice: null };
 }
 
 export function toggleClosed(s: EditorState, now?: number): EditorState {
   if (s.drawing) return s;
   const node = primaryNode(s);
-  if (!node || node.kind !== "path" || node.locked) return { ...s, notice: NEED_PATH_NOTICE };
-  if (!node.closed) {
-    if (node.points.length < 3) return { ...s, notice: "閉じるには点が 3 つ以上要ります" };
+  const path = editablePath(node);
+  if (!node || !path || node.locked) {
+    return { ...s, notice: node?.kind === "group" ? GROUP_EDIT_NOTICE : NEED_PATH_NOTICE };
+  }
+  const doc = currentDoc(s);
+  if (!path.closed) {
+    if (path.points.length < 3) return { ...s, notice: "閉じるには点が 3 つ以上要ります" };
     const next: PathNode = {
-      ...node, closed: true, style: { ...node.style, fill: node.style.fill ?? node.style.stroke ?? DEFAULT_STYLE.fill },
+      ...path, closed: true, style: { ...path.style, fill: path.style.fill ?? path.style.stroke ?? DEFAULT_STYLE.fill },
     };
-    return withDoc(s, updateNode(currentDoc(s), node.id, () => next), undefined, now);
+    return withDoc(s, updateNode(doc, node.id, (n) => withEditableLeaf(n, () => next)), undefined, now);
   }
   const next: PathNode = {
-    ...node, closed: false,
+    ...path, closed: false,
     style: {
-      ...node.style, fill: null, stroke: node.style.stroke ?? node.style.fill,
-      strokeWidth: Math.max(node.style.strokeWidth, 2),
+      ...path.style, fill: null, stroke: path.style.stroke ?? path.style.fill,
+      strokeWidth: Math.max(path.style.strokeWidth, 2),
     },
   };
-  return { ...withDoc(s, updateNode(currentDoc(s), node.id, () => next), undefined, now), heldHandle: null };
+  return { ...withDoc(s, updateNode(doc, node.id, (n) => withEditableLeaf(n, () => next)), undefined, now), heldHandle: null };
 }
 
 export function toggleCornerAtHandle(s: EditorState, now?: number): EditorState {
   if (s.drawing) return s;
   const node = primaryNode(s);
+  const path = editablePath(node);
   const need = { ...s, notice: "曲線の点（丸いつまみ）をつかんでから押してください" };
-  if (!node || node.kind !== "path" || !node.smooth || node.locked || s.heldHandle === null) return need;
+  if (!node || !path || !path.smooth || node.locked || s.heldHandle === null) return need;
   if (!s.heldHandle.startsWith("vertex:")) return need;
   const i = Number(s.heldHandle.slice(7));
-  const pt = node.points[i];
+  const pt = path.points[i];
   if (!pt) return need;
-  return withDoc(s, updateNode(currentDoc(s), node.id, () => setPathCorner(node, i, !pt.corner)), undefined, now);
+  const next = setPathCorner(path, i, !pt.corner);
+  return withDoc(s, updateNode(currentDoc(s), node.id, (n) => withEditableLeaf(n, () => next)), undefined, now);
 }
 
 export function insertPointAtHandle(s: EditorState, now?: number): EditorState {
   if (s.drawing) return s;
   const node = primaryNode(s);
   if (!node || node.locked || s.heldHandle === null || !s.heldHandle.startsWith("edge:")) return s;
-  if (node.kind !== "path" && node.kind !== "polygon" && node.kind !== "rect") return s;
-  const path = node.kind === "path" ? node : toPath(node);
+  const leaf = editableLeaf(node);
+  if (!leaf || (leaf.kind !== "path" && leaf.kind !== "polygon" && leaf.kind !== "rect")) return s;
+  const path = leaf.kind === "path" ? leaf : toPath(leaf);
   if (!path) return s;
   const i = Number(s.heldHandle.slice(5));
   const a = path.points[i];
@@ -565,11 +622,86 @@ export function insertPointAtHandle(s: EditorState, now?: number): EditorState {
   const doc = currentDoc(s);
   const mid = toWorld(path, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   const next = insertPathPoint(path, i, snapPointToDoc(mid, doc));
-  return { ...withDoc(s, updateNode(doc, node.id, () => next), undefined, now), heldHandle: `vertex:${i + 1}` };
+  return {
+    ...withDoc(s, updateNode(doc, node.id, (n) => withEditableLeaf(n, () => next)), undefined, now),
+    heldHandle: `vertex:${i + 1}`,
+  };
 }
 
 export function setTension(s: EditorState, v: number, now?: number): EditorState {
   const node = primaryNode(s);
-  if (!node || node.kind !== "path") return s;
-  return setNodeProp(s, node.id, { tension: Math.min(1, Math.max(0, v)) } as Partial<SceneNode>, "prop:tension", now);
+  if (!node || !editablePath(node)) return s;
+  const tension = Math.min(1, Math.max(0, v));
+  return withDoc(
+    s,
+    updateNode(currentDoc(s), node.id, (n) => withEditableLeaf(n, (l) => (l.kind === "path" ? { ...l, tension } : l))),
+    "prop:tension",
+    now,
+  );
+}
+
+// ---- containers ---------------------------------------------------------
+
+export function groupSelection(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
+  if (s.selection.length < 2) return { ...s, notice: NEED_TWO_NOTICE };
+  const { doc, id } = groupNodes(currentDoc(s), s.selection);
+  if (id === null) return { ...s, notice: NEED_TWO_NOTICE };
+  return {
+    ...withDoc(s, doc, undefined, now), selection: [id], heldHandle: null, multiSelect: false, rotateMode: false, notice: null,
+  };
+}
+
+export function ungroupSelection(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
+  let doc = currentDoc(s);
+  const ids: string[] = [];
+  let sawGenerated = false;
+  let any = false;
+  for (const id of s.selection) {
+    const node = doc.nodes.find((n) => n.id === id);
+    if (!node || (node.kind !== "group" && node.kind !== "repeat" && node.kind !== "mirror")) continue;
+    const r = ungroupNode(doc, id);
+    doc = r.doc;
+    ids.push(...r.ids);
+    any = true;
+    if (node.kind !== "group") sawGenerated = true;
+  }
+  if (!any) return { ...s, notice: "グループ・連続配置・対称を選んでください" };
+  return {
+    ...withDoc(s, doc, undefined, now), selection: ids, heldHandle: null, multiSelect: false, rotateMode: false,
+    notice: sawGenerated ? "ばらしました（Z で戻せます）" : null,
+  };
+}
+
+function wrapSelection(s: EditorState, kind: "repeat" | "mirror", now?: number): EditorState {
+  if (s.drawing) return s;
+  if (s.selection.length === 0) return { ...s, notice: "図形を選んでから押してください" };
+  let doc = currentDoc(s);
+  let target: string | null = s.selection[0] as string;
+  if (s.selection.length >= 2) {
+    const g = groupNodes(doc, s.selection);
+    doc = g.doc;
+    target = g.id;
+  }
+  if (target === null || !doc.nodes.some((n) => n.id === target)) return s;
+  const r = kind === "repeat" ? wrapRepeat(doc, target) : wrapMirror(doc, target);
+  if (r.id === null) return s;
+  return {
+    ...withDoc(s, r.doc, undefined, now), selection: [r.id], heldHandle: null, multiSelect: false, rotateMode: false, notice: null,
+  };
+}
+
+export function repeatSelection(s: EditorState, now?: number): EditorState {
+  return wrapSelection(s, "repeat", now);
+}
+
+export function mirrorSelection(s: EditorState, now?: number): EditorState {
+  return wrapSelection(s, "mirror", now);
+}
+
+export function setMirrorMode(s: EditorState, mode: MirrorMode, now?: number): EditorState {
+  const node = primaryNode(s);
+  if (!node || node.kind !== "mirror") return s;
+  return withDoc(s, updateNode(currentDoc(s), node.id, (n) => (n.kind === "mirror" ? { ...n, mode } : n)), "prop:mode", now);
 }

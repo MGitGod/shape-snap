@@ -1,3 +1,4 @@
+import { editableLeaf } from "../core/tree";
 import { primaryNode, type EditorState } from "../editor/state";
 
 export type ActionId =
@@ -8,7 +9,8 @@ export type ActionId =
   | "forward" | "backward" | "duplicate" | "delete" | "undo" | "redo"
   | "toggle-visible" | "toggle-locked" | "toggle-solo"
   | "fit-view" | "grid-finer" | "grid-coarser"
-  | "scale-down" | "scale-up" | "rotate-mode" | "fill-none" | "to-path" | "guide-h" | "guide-v";
+  | "scale-down" | "scale-up" | "rotate-mode" | "fill-none" | "to-path" | "guide-h" | "guide-v"
+  | "group" | "ungroup" | "repeat" | "mirror";
 
 export interface KeyBinding {
   key: string;
@@ -58,6 +60,10 @@ export const KEYMAP: KeyBinding[] = [
   b("j", "to-path", "自由な形に変える", "編集"),
   b("s", "smooth", "曲線", "編集"),
   b("/", "corner-point", "点を角にする", "編集"),
+  b("g", "group", "グループ", "編集"),
+  b("u", "ungroup", "解く・ばらす", "編集"),
+  b("a", "repeat", "連続配置", "置く"),
+  b("x", "mirror", "対称", "置く"),
   b("Enter", "confirm", "確定", "選ぶ"),
   b("-", "guide-h", "横のガイド", "見る"),
   b("i", "guide-v", "縦のガイド", "見る"),
@@ -107,12 +113,16 @@ function baseHints(s: EditorState): Hint[] {
   if (s.heldHandle !== null) {
     const node = primaryNode(s);
     const extra: Hint[] = [];
-    if (node && s.heldHandle.startsWith("edge:") && (node.kind === "path" || node.kind === "polygon" || node.kind === "rect")) {
+    const leaf = node ? editableLeaf(node) : null;
+    if (leaf && s.heldHandle.startsWith("edge:") && (leaf.kind === "path" || leaf.kind === "polygon" || leaf.kind === "rect")) {
       extra.push(h("Enter", "点を足す"));
     }
-    if (node && node.kind === "path" && s.heldHandle.startsWith("vertex:")) {
-      if (node.smooth) extra.push(h("/", "角にする・丸める"));
+    if (leaf && leaf.kind === "path" && s.heldHandle.startsWith("vertex:")) {
+      if (leaf.smooth) extra.push(h("/", "角にする・丸める"));
       extra.push(h("Delete", "点を消す"));
+    }
+    if (s.heldHandle === "axis:0") {
+      return [h("クリック / 矢印", "軸を動かす"), h("W", "次のつまみ"), h("右クリック / Esc", "つかむのをやめる")];
     }
     return [
       h("クリック / 矢印 / Space", "つまみを動かす"),
@@ -124,14 +134,19 @@ function baseHints(s: EditorState): Hint[] {
   if (s.multiSelect) {
     return [
       h("クリック", "足す・外す"), h("M", "複数選択を終える"), h("矢印", "動かす"),
+      h("G", "グループ"),
       h("設定", "揃える・間隔"),
     ];
   }
   if (s.selection.length > 0) {
     const main = primaryNode(s);
+    const isContainer = main !== undefined && (main.kind === "group" || main.kind === "repeat" || main.kind === "mirror");
     return [
       h("つまみをクリック", "つかむ"),
-      ...(main && main.kind === "path" ? [h("S", "曲線・直線")] : []),
+      ...(main && editableLeaf(main)?.kind === "path" ? [h("S", "曲線・直線")] : []),
+      ...(isContainer ? [h("U", "解く・ばらす")] : []),
+      h("A", "連続配置"),
+      h("X", "対称"),
       h("何もない点をクリック / Space / 矢印", "動かす"),
       h("W", "つまみ"),
       h("V", "回転"),

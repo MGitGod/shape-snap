@@ -1,4 +1,5 @@
 import {
+  groupSelection, mirrorSelection, repeatSelection, ungroupSelection,
   addGuideAtCursor, convertToPath, cycleFocus, cycleHandle, cycleSelection, deleteSelection, duplicateSelection, escape, fitView,
   gridCoarser, gridFiner, finishLine, insertPointAtHandle, moveToCursor, nudge, placeShape, redoAction, reorderSelection,
   scaleSelection, startLine, toggleCornerAtHandle, toggleSmooth, toggleFillNoneSelection, toggleLocked, toggleRotateMode, toggleMultiSelect, toggleSolo, toggleVisible, undoAction,
@@ -55,6 +56,10 @@ export function runAction(action: ActionId, viewport: Viewport): void {
     case "to-path": dispatch((s) => convertToPath(s)); break;
     case "guide-h": dispatch((s) => addGuideAtCursor(s, "h")); break;
     case "guide-v": dispatch((s) => addGuideAtCursor(s, "v")); break;
+    case "group": dispatch((s) => groupSelection(s)); break;
+    case "ungroup": dispatch((s) => ungroupSelection(s)); break;
+    case "repeat": dispatch((s) => repeatSelection(s)); break;
+    case "mirror": dispatch((s) => mirrorSelection(s)); break;
   }
 }
 
