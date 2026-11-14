@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { hasSubtract } from "../core/combine";
 import { exportBounds, documentToSvg, type ExportOptions } from "../render/svg";
 import { useEditor } from "../editor/store";
-import { downloadBlob, safeFileName, serializeDocument } from "../io/files";
+import { safeFileName, serializeDocument } from "../io/files";
+import { isDesktop, saveFile } from "../io/platform";
 import { svgToPngBlob } from "../io/png";
 import { workStore } from "../io/session";
 import { SliderField } from "./SliderField";
@@ -44,9 +45,10 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const run = async (): Promise<void> => {
     setError(null);
     const name = safeFileName(workStore.getState().currentName);
+    let result: "saved" | "cancelled" = "saved";
     try {
       if (format === "work") {
-        downloadBlob(new Blob([serializeDocument(doc)], { type: "application/json" }), `${name}.json`);
+        result = await saveFile(new Blob([serializeDocument(doc)], { type: "application/json" }), `${name}.json`);
       } else {
         const opts: ExportOptions = {
           area: "content",
@@ -56,7 +58,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         };
         const svg = documentToSvg(doc, opts);
         if (format === "svg") {
-          downloadBlob(new Blob([svg], { type: "image/svg+xml" }), `${name}.svg`);
+          result = await saveFile(new Blob([svg], { type: "image/svg+xml" }), `${name}.svg`);
         } else {
           setBusy(true);
           const b = exportBounds(doc, opts);
@@ -64,12 +66,12 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           const h = b.maxY - b.minY;
           const scale = longSide / Math.max(w, h);
           const blob = await svgToPngBlob(svg, w * scale, h * scale);
-          downloadBlob(blob, `${name}.png`);
+          result = await saveFile(blob, `${name}.png`);
         }
       }
-      onClose();
+      if (result === "saved") onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "書き出せませんでした");
+      setError(isDesktop() ? "保存できませんでした" : e instanceof Error ? e.message : "書き出せませんでした");
     } finally {
       setBusy(false);
     }

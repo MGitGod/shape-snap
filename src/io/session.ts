@@ -4,7 +4,8 @@ import { createDocument } from "../core/model";
 import type { Document } from "../core/types";
 import { loadDocument } from "../editor/actions";
 import { dispatch, editorStore } from "../editor/store";
-import { downloadBlob, parseDocument, safeFileName, serializeDocument } from "./files";
+import { parseDocument, safeFileName, serializeDocument } from "./files";
+import { saveFile } from "./platform";
 import {
   deleteWork, getCurrentWorkId, listWorks, loadWork, saveWork, setCurrentWorkId, type WorkMeta,
 } from "./storage";
@@ -179,9 +180,9 @@ export async function importWorkFile(text: string, fileName: string): Promise<Im
   return { ok: true };
 }
 
-export function exportWorkFile(): void {
+export async function exportWorkFile(): Promise<void> {
   const name = workStore.getState().currentName;
-  downloadBlob(
+  await saveFile(
     new Blob([serializeDocument(currentDoc())], { type: "application/json" }),
     `${safeFileName(name)}.json`,
   );

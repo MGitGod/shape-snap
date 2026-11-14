@@ -12,6 +12,11 @@ npm run dev
 
 ブラウザで http://localhost:5173 を開きます。作品は自動で保存され、リロードしても戻ります。
 
+### デスクトップアプリ（Windows）
+
+ブラウザなしで起動できるアプリにもできます（Tauri v2）。開発中の起動は `npm run app:dev`、配布用のビルドは `npm run app:build` です。
+Rust と Visual Studio Build Tools が要ります。くわしくは [docs/desktop.md](docs/desktop.md) を見てください。
+
 ## できること
 
 - 四角・円・多角形をカーソルの位置（グリッドの点）に置く

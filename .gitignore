@@ -5,3 +5,5 @@ playwright-report/
 *.log
 .DS_Store
 .superpowers/
+src-tauri/target/
+src-tauri/gen/

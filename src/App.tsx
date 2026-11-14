@@ -28,6 +28,11 @@ export function App() {
   const ready = useWork((s) => s.ready);
   const saveError = useWork((s) => s.saveError);
   const [dialog, setDialog] = useState<"works" | "export" | "keys" | null>(null);
+  const [exportError, setExportError] = useState(false);
+  const exportWork = useCallback(() => {
+    setExportError(false);
+    exportWorkFile().catch(() => setExportError(true));
+  }, []);
   const closeDialog = useCallback(() => setDialog(null), []);
   useEffect(() => attachKeyboard(canvasViewport), []);
   useEffect(() => { void startSession(); }, []);
@@ -56,9 +61,10 @@ export function App() {
         <Banner
           message="自動保存に失敗しました。作業ファイルを書き出して控えを取ってください。"
           actionLabel="作業ファイルを書き出す"
-          onAction={exportWorkFile}
+          onAction={exportWork}
         />
       )}
+      {exportError && <Banner message="保存できませんでした" />}
       {notice !== null && notice.startsWith("結合できませんでした") && <Banner message={resolveKeys(notice, keymap)} />}
       {dialog === "works" && <WorksMenu onClose={closeDialog} />}
       {dialog === "keys" && <KeysDialog onClose={closeDialog} />}
