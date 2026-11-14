@@ -41,10 +41,8 @@ body {
 .toolbar {
   grid-area: toolbar;
   display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas:
-    "title end"
-    "tools tools";
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "title tools end";
   align-items: center;
   gap: 4px 12px;
   padding: 4px 16px;

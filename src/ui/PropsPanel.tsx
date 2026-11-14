@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { mapSourceLeaves, sourceLeaves } from "../core/tree";
-import type { Anchor, GridSettings, LeafNode, PathNode, SceneNode, Style } from "../core/types";
+import type { Anchor, GridSettings, LeafNode, MirrorMode, MirrorNode, PathNode, SceneNode, Style } from "../core/types";
 import { toggleLeafFillNone } from "../core/arrange";
-import { setAnchor, setNodeProp, toggleClosed } from "../editor/actions";
+import { setAnchor, setMirrorMode, setNodeProp, toggleClosed } from "../editor/actions";
 import { runAction, type Viewport } from "../input/keyboard";
 import { KEYMAP, keyLabel, type ActionId } from "../input/keymap";
 import { ArrangePanel } from "./ArrangePanel";
@@ -29,11 +29,54 @@ const OPS: Array<{ action: ActionId; label: string }> = [
   { action: "to-path", label: "自由な形に変える" },
 ];
 
-function OpButtons({ getViewport }: { getViewport: () => Viewport }) {
+function opsFor(node: SceneNode | undefined, selectedCount: number): Array<{ action: ActionId; label: string }> {
+  const extra: Array<{ action: ActionId; label: string }> = [];
+  if (selectedCount >= 2) extra.push({ action: "group", label: "グループ" });
+  if (node) {
+    if (node.kind === "group") extra.push({ action: "ungroup", label: "解く" });
+    else if (node.kind === "repeat" || node.kind === "mirror") extra.push({ action: "ungroup", label: "ばらす" });
+    extra.push({ action: "repeat", label: "連続配置" }, { action: "mirror", label: "対称" });
+  }
+  return [...extra, ...OPS];
+}
+
+const MIRROR_MODES: Array<{ mode: MirrorMode; label: string }> = [
+  { mode: "h", label: "左右" },
+  { mode: "v", label: "上下" },
+  { mode: "both", label: "上下左右" },
+  { mode: "rotate", label: "回転" },
+];
+
+function MirrorModes({ node }: { node: MirrorNode }) {
+  return (
+    <div className="anchor-field">
+      <div className="color-title">対称の種類</div>
+      <div className="anchor-row" data-testid="mirror-modes">
+        {MIRROR_MODES.map((m) => (
+          <button
+            key={m.mode}
+            type="button"
+            className={`btn${node.mode === m.mode ? " on" : ""}`}
+            data-mirror-mode={m.mode}
+            aria-pressed={node.mode === m.mode}
+            onClick={(e) => {
+              dispatch((s) => setMirrorMode(s, m.mode));
+              e.currentTarget.blur();
+            }}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OpButtons({ getViewport, node, selectedCount }: { getViewport: () => Viewport; node?: SceneNode; selectedCount: number }) {
   const rotating = useEditor((s) => s.rotateMode);
   return (
     <div className="op-row" data-testid="shape-ops">
-      {OPS.map((op) => {
+      {opsFor(node, selectedCount).map((op) => {
         const binding = KEYMAP.find((b) => b.action === op.action);
         const pressed = op.action === "rotate-mode" ? rotating : undefined;
         return (
@@ -187,7 +230,8 @@ function PropsBody({ node, grid, getViewport }: { node: SceneNode; grid: GridSet
           onChange={(v) => apply("stroke", restyle(node, (leaf) => ({ ...leaf.style, stroke: v })))}
         />
       )}
-      <OpButtons getViewport={getViewport} />
+      <OpButtons getViewport={getViewport} node={node} selectedCount={1} />
+      {node.kind === "mirror" && <MirrorModes node={node} />}
       {node.kind === "path" && <PathButtons node={node} getViewport={getViewport} />}
       {defs.map((def, i) => (
         <SliderField
@@ -237,7 +281,7 @@ export function PropsPanel({ getViewport }: { getViewport: () => Viewport }) {
       {selection.length === 0 && <p className="empty">図形を選ぶと、ここに設定が出ます</p>}
       {selection.length > 1 && <p className="empty">{selection.length} 個の図形を選んでいます</p>}
       {selection.length > 1 && <ArrangePanel />}
-      {selection.length > 1 && <OpButtons getViewport={getViewport} />}
+      {selection.length > 1 && <OpButtons getViewport={getViewport} selectedCount={selection.length} />}
       {node && <PropsBody key={node.id} node={node} grid={doc.grid} getViewport={getViewport} />}
     </section>
   );

@@ -79,7 +79,7 @@ test("a triangle's corners all sit on grid points", async ({ page }) => {
   const s = await snap(page);
   const node = s.nodes[0];
   expect(node?.kind).toBe("polygon");
-  const raw = await page.locator("[data-node-id]").getAttribute("points");
+  const raw = await page.locator("[data-node-id] > polygon").getAttribute("points");
   const pts = (raw ?? "").trim().split(/\s+/).map((p) => p.split(",").map(Number));
   expect(pts).toHaveLength(3);
   for (const [x, y] of pts) {
@@ -159,7 +159,7 @@ test("N removes the fill, keeps a stroke and the shape stays visible", async ({ 
   const node = (await snap(page)).nodes[0];
   expect(node?.style.fill).toBeNull();
   expect(node?.style.stroke).not.toBeNull();
-  const stroke = await page.locator("[data-node-id]").getAttribute("stroke");
+  const stroke = await page.locator("[data-node-id] > *").first().getAttribute("stroke");
   expect(stroke).not.toBeNull();
   expect(stroke).not.toBe("none");
 });

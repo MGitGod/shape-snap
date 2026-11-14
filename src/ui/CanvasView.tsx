@@ -1,7 +1,7 @@
 import { createElement, useEffect, useLayoutEffect, useRef } from "react";
 import type { MouseEvent } from "react";
 import { snapPointToDoc, worldOutlines } from "../core/geometry";
-import { editableLeaf, nodeCenter } from "../core/tree";
+import { editableLeaf, expandNode, nodeCenter, sourceLeaves } from "../core/tree";
 import { getHandles } from "../core/handles";
 import type { Point } from "../core/types";
 import { clickCanvas, fitView, setCursor, zoomAt } from "../editor/actions";
@@ -12,6 +12,7 @@ import { nodeToSvgList } from "../render/svg";
 const HANDLE_PX = 14;
 const CORNER_PX = 16;
 const VERTEX_PX = 16;
+const AXIS_PX = 18;
 
 export function CanvasView() {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -121,27 +122,34 @@ export function CanvasView() {
         </>
       )}
       <g transform={`translate(${panX} ${panY}) scale(${zoom})`}>
-        {doc.nodes.filter((n) => n.visible).flatMap((n) =>
-          nodeToSvgList(n).map((spec, i) => {
-            const attrs: Record<string, string | number> = {};
-            for (const [k, v] of Object.entries(spec.attrs)) {
-              attrs[k.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] = v;
-            }
-            if (solo && !selection.includes(n.id)) {
-              const base = typeof attrs.opacity === "number" ? attrs.opacity : 1;
-              attrs.opacity = base * 0.25;
-            }
-            return createElement(spec.tag, { ...attrs, key: `${n.id}:${i}`, "data-node-id": n.id });
-          }),
-        )}
-        {selected.filter((n) => n.visible).flatMap((n) => worldOutlines(n).map((o, i) => ({ n, o, i }))).map(({ n, o, i }) => {
+        {doc.nodes.filter((n) => n.visible).map((n) => (
+          <g
+            key={n.id}
+            data-node-id={n.id}
+            opacity={solo && !selection.includes(n.id) ? 0.25 : undefined}
+          >
+            {nodeToSvgList(n).map((spec, i) => {
+              const attrs: Record<string, string | number> = {};
+              for (const [k, v] of Object.entries(spec.attrs)) {
+                attrs[k.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] = v;
+              }
+              return createElement(spec.tag, { ...attrs, key: `${n.id}:${i}` });
+            })}
+          </g>
+        ))}
+        {selected.filter((n) => n.visible).flatMap((n) => {
+          const sourceIds = new Set(sourceLeaves(n).map((l) => l.id));
+          const leaves = expandNode(n);
+          return worldOutlines(n).map((o, i) => ({ n, o, i, copy: !sourceIds.has(leaves[i]?.id ?? "") }));
+        }).map(({ n, o, i, copy }) => {
           const outline = {
             key: `outline-${n.id}:${i}`,
+            "data-outline": copy ? "copy" : "source",
             points: o.points.map((p) => `${p.x},${p.y}`).join(" "),
             fill: "none",
             stroke: "var(--accent)",
             strokeWidth: 2,
-            strokeDasharray: rotateMode ? "6 4" : undefined,
+            strokeDasharray: copy ? "2 4" : rotateMode ? "6 4" : undefined,
             vectorEffect: "non-scaling-stroke" as const,
             pointerEvents: "none" as const,
           };
@@ -159,6 +167,11 @@ export function CanvasView() {
           const pt = lead && lead.kind === "path" && lead.smooth ? lead.points[h.index] : undefined;
           if (h.kind === "vertex" && pt?.corner) {
             const r = VERTEX_PX / 2 / zoom;
+            const d = `M ${h.pos.x} ${h.pos.y - r} L ${h.pos.x + r} ${h.pos.y} L ${h.pos.x} ${h.pos.y + r} L ${h.pos.x - r} ${h.pos.y} Z`;
+            return <path key={h.id} {...common} d={d} data-handle-shape="diamond" />;
+          }
+          if (h.kind === "axis") {
+            const r = AXIS_PX / 2 / zoom;
             const d = `M ${h.pos.x} ${h.pos.y - r} L ${h.pos.x + r} ${h.pos.y} L ${h.pos.x} ${h.pos.y + r} L ${h.pos.x - r} ${h.pos.y} Z`;
             return <path key={h.id} {...common} d={d} data-handle-shape="diamond" />;
           }
@@ -270,6 +283,26 @@ export function CanvasView() {
           />
         ),
       )}
+      {only && only.kind === "mirror" && only.visible && (() => {
+        const ax = only.axisX * zoom + panX;
+        const ay = only.axisY * zoom + panY;
+        const common = { stroke: "var(--guide)", strokeWidth: 1.5, pointerEvents: "none" as const };
+        const vLine = <line key="axis-v" y1={0} y2="100%" x1={ax} x2={ax} {...common} />;
+        const hLine = <line key="axis-h" x1={0} x2="100%" y1={ay} y2={ay} {...common} />;
+        return (
+          <g data-testid="mirror-axis" data-axis-mode={only.mode} pointerEvents="none">
+            {(only.mode === "h" || only.mode === "both") && vLine}
+            {(only.mode === "v" || only.mode === "both") && hLine}
+            {only.mode === "rotate" && (
+              <>
+                <line x1={ax - 24} x2={ax + 24} y1={ay} y2={ay} {...common} />
+                <line y1={ay - 24} y2={ay + 24} x1={ax} x2={ax} {...common} />
+                <circle cx={ax} cy={ay} r={14} fill="none" {...common} />
+              </>
+            )}
+          </g>
+        );
+      })()}
       {rotateMode &&
         selected.filter((n) => n.visible).map((n) => {
           const center = nodeCenter(n);

@@ -49,7 +49,7 @@ async function centreOf(page: Page, selector: string): Promise<{ x: number; y: n
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-const pathD = (page: Page) => page.locator("[data-node-id]").first().getAttribute("d");
+const pathD = (page: Page) => page.locator("[data-node-id] > path").first().getAttribute("d");
 
 test("draw a zigzag line, preview shows while drawing, Enter confirms", async ({ page }) => {
   await start(page);
@@ -69,7 +69,7 @@ test("draw a zigzag line, preview shows while drawing, Enter confirms", async ({
     expect(Math.abs((p.x + n.transform.x) % 20)).toBe(0);
     expect(Math.abs((p.y + n.transform.y) % 20)).toBe(0);
   }
-  const el = page.locator("[data-node-id]");
+  const el = page.locator("[data-node-id] > *");
   await expect(el).toHaveCount(1);
   expect(await el.evaluate((e) => e.tagName.toLowerCase())).toBe("path");
   await expect(el).toHaveAttribute("fill", "none");

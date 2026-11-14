@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { sourceLeaves } from "../core/tree";
 import type { SceneNode } from "../core/types";
 import { selectOnly, setNodeProp } from "../editor/actions";
 import { currentDoc } from "../editor/state";
@@ -7,6 +8,17 @@ import { dispatch, editorStore, useEditor } from "../editor/store";
 function isTextField(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
   return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
+}
+
+const MODE_LABEL = { h: "左右", v: "上下", both: "上下左右", rotate: "回転" } as const;
+
+function summary(node: SceneNode): string {
+  switch (node.kind) {
+    case "repeat": return `（×${node.count}）`;
+    case "mirror": return `（${MODE_LABEL[node.mode]}）`;
+    case "group": return `（${sourceLeaves(node).length} 個）`;
+    default: return "";
+  }
 }
 
 function Row({ node, selected }: { node: SceneNode; selected: boolean }) {
@@ -76,7 +88,7 @@ function Row({ node, selected }: { node: SceneNode; selected: boolean }) {
           onBlur={(e) => finishRename(e.currentTarget.value, true)}
         />
       ) : (
-        <span className="row-name">{node.name}</span>
+        <span className="row-name">{node.name}{summary(node) && <span className="row-summary" data-row-summary>{summary(node)}</span>}</span>
       )}
       {!editing && (
         <>

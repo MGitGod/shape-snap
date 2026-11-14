@@ -178,6 +178,17 @@ test("stage 1 walkthrough with clicks and single keys only", async ({ page }) =>
   await expect(page.locator("[data-node-id]")).toHaveCount(s.nodes.length);
   expect(elements).toHaveLength(s.nodes.length);
   expect(elements).toHaveLength(count + 2);
+  await page.keyboard.press("Escape");
+
+  // 11. repeat the front shape and change the count from the panel
+  const frontId = s.nodes[s.nodes.length - 1]!.id;
+  await page.locator(`[data-list-id="${frontId}"] .row-name`).click();
+  await page.keyboard.press("a");
+  expect((await snap(page)).nodes[s.nodes.length - 1]?.kind).toBe("repeat");
+  await expect(page.locator("[data-node-id]")).toHaveCount(s.nodes.length);
+  await page.locator('[data-prop="count"] input[type="number"]').fill("3");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-node-id] > :is(rect, ellipse, polygon, path)")).toHaveCount(s.nodes.length + 2);
 });
 
 for (const size of [{ width: 1280, height: 800 }, { width: 1024, height: 768 }]) {
