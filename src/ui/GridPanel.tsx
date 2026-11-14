@@ -48,7 +48,7 @@ export function GridPanel() {
       </label>
       <div className="color-title">ガイド</div>
       {guides.length === 0 ? (
-        <p className="empty">ガイドはありません（- と I で足せます）</p>
+        <p className="empty">{`ガイドはありません（${keyLabel(keyFor(map, "guide-h"))} と ${keyLabel(keyFor(map, "guide-v"))} で足せます）`}</p>
       ) : (
         <div className="guide-list">
           {guides.map((g) => (

@@ -38,6 +38,7 @@ test("a changed key places the shape, shows on every label, and survives a reloa
   await assign(page, "place-rect", ";");
   await expect(page.locator('[data-key-action="place-rect"] kbd')).toHaveText(";");
   await closeKeys(page);
+  await expect(page.getByText("；・C・P で図形".replace("；", ";"))).toBeVisible();
 
   await overCanvas(page);
   await page.keyboard.press("r");

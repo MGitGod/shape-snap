@@ -4,6 +4,8 @@ import type { SceneNode } from "../core/types";
 import { selectOnly, setNodeProp } from "../editor/actions";
 import { currentDoc } from "../editor/state";
 import { dispatch, editorStore, useEditor } from "../editor/store";
+import { keyFor, keyLabel, type ActionId } from "../input/keymap";
+import { useKeymap } from "../input/keymapStore";
 
 function isTextField(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -130,6 +132,8 @@ function Row({ node, selected }: { node: SceneNode; selected: boolean }) {
 export function ShapeList() {
   const doc = useEditor((s) => currentDoc(s));
   const selection = useEditor((s) => s.selection);
+  const map = useKeymap();
+  const k = (action: ActionId): string => keyLabel(keyFor(map, action));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -156,7 +160,7 @@ export function ShapeList() {
     <section className="panel" data-area="list" aria-label="図形リスト">
       <h2>図形リスト</h2>
       {shown.length === 0 ? (
-        <p className="empty">R・C・P で図形、L で線を置けます</p>
+        <p className="empty">{`${k("place-rect")}・${k("place-ellipse")}・${k("place-polygon")} で図形、${k("line")} で線を置けます`}</p>
       ) : (
         <div role="listbox" aria-label="図形" aria-multiselectable="true">
           {shown.map((n) => (
