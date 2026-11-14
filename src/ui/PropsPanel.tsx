@@ -213,6 +213,21 @@ function PropsBody({ node, grid, getViewport }: { node: SceneNode; grid: GridSet
 
   return (
     <div ref={rootRef}>
+      {node.kind === "mirror" && <MirrorModes node={node} />}
+      {node.kind === "path" && <PathButtons node={node} getViewport={getViewport} />}
+      {defs.map((def, i) => (
+        <SliderField
+          key={def.key}
+          propKey={def.key}
+          label={def.label}
+          value={def.get(node)}
+          min={def.min}
+          max={def.max}
+          step={def.step}
+          active={focusArea === "props" && i === active}
+          onChange={(v) => apply(def.key, def.set(node, clampToDef(def, v)))}
+        />
+      ))}
       {lead && (
         <ColorField
           kind="fill"
@@ -231,21 +246,6 @@ function PropsBody({ node, grid, getViewport }: { node: SceneNode; grid: GridSet
         />
       )}
       <OpButtons getViewport={getViewport} node={node} selectedCount={1} />
-      {node.kind === "mirror" && <MirrorModes node={node} />}
-      {node.kind === "path" && <PathButtons node={node} getViewport={getViewport} />}
-      {defs.map((def, i) => (
-        <SliderField
-          key={def.key}
-          propKey={def.key}
-          label={def.label}
-          value={def.get(node)}
-          min={def.min}
-          max={def.max}
-          step={def.step}
-          active={focusArea === "props" && i === active}
-          onChange={(v) => apply(def.key, def.set(node, clampToDef(def, v)))}
-        />
-      ))}
       <div className="anchor-field">
         <div className="color-title">基準点</div>
         <div className="anchor-row">
