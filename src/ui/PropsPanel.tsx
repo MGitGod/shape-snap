@@ -4,7 +4,8 @@ import type { Anchor, GridSettings, LeafNode, MirrorMode, MirrorNode, PathNode, 
 import { toggleLeafFillNone } from "../core/arrange";
 import { setAnchor, setMirrorMode, setNodeProp, toggleClosed } from "../editor/actions";
 import { runAction, type Viewport } from "../input/keyboard";
-import { KEYMAP, keyLabel, type ActionId } from "../input/keymap";
+import { keyFor, keyLabel, type ActionId } from "../input/keymap";
+import { useKeymap } from "../input/keymapStore";
 import { ArrangePanel } from "./ArrangePanel";
 import { currentDoc } from "../editor/state";
 import { dispatch, editorStore, useEditor } from "../editor/store";
@@ -75,10 +76,10 @@ function MirrorModes({ node }: { node: MirrorNode }) {
 
 function OpButtons({ getViewport, node, selectedCount }: { getViewport: () => Viewport; node?: SceneNode; selectedCount: number }) {
   const rotating = useEditor((s) => s.rotateMode);
+  const map = useKeymap();
   return (
     <div className="op-row" data-testid="shape-ops">
       {opsFor(node, selectedCount).map((op) => {
-        const binding = KEYMAP.find((b) => b.action === op.action);
         const pressed = op.action === "rotate-mode" ? rotating : undefined;
         return (
           <button
@@ -92,7 +93,7 @@ function OpButtons({ getViewport, node, selectedCount }: { getViewport: () => Vi
               e.currentTarget.blur();
             }}
           >
-            {op.label} {binding ? <kbd>{keyLabel(binding.key)}</kbd> : null}
+            {op.label} <kbd>{keyLabel(keyFor(map, op.action))}</kbd>
           </button>
         );
       })}
@@ -102,10 +103,8 @@ function OpButtons({ getViewport, node, selectedCount }: { getViewport: () => Vi
 
 function PathButtons({ node, getViewport }: { node: PathNode; getViewport: () => Viewport }) {
   const held = useEditor((s) => s.heldHandle);
-  const kbd = (action: ActionId) => {
-    const b = KEYMAP.find((x) => x.action === action);
-    return b ? <kbd>{keyLabel(b.key)}</kbd> : null;
-  };
+  const map = useKeymap();
+  const kbd = (action: ActionId) => <kbd>{keyLabel(keyFor(map, action))}</kbd>;
   const run = (action: ActionId) => (e: { currentTarget: HTMLElement }) => {
     runAction(action, getViewport());
     e.currentTarget.blur();
@@ -140,7 +139,7 @@ function PathButtons({ node, getViewport }: { node: PathNode; getViewport: () =>
       )}
       {onVertex && (
         <button type="button" className="btn" data-path-action="delete-point" onClick={run("delete")}>
-          点を消す <kbd>Delete</kbd>
+          点を消す {kbd("delete")}
         </button>
       )}
     </div>

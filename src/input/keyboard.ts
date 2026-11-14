@@ -5,7 +5,8 @@ import {
   scaleSelection, startLine, toggleCombineView, toggleRole, toggleCornerAtHandle, toggleSmooth, toggleFillNoneSelection, toggleLocked, toggleRotateMode, toggleMultiSelect, toggleSolo, toggleVisible, undoAction,
 } from "../editor/actions";
 import { dispatch, editorStore } from "../editor/store";
-import { findBinding, type ActionId } from "./keymap";
+import { findBindingIn, type ActionId } from "./keymap";
+import { keymapStore } from "./keymapStore";
 
 export interface Viewport { width: number; height: number }
 
@@ -65,6 +66,11 @@ export function runAction(action: ActionId, viewport: Viewport): void {
   }
 }
 
+/** True when ctrl, alt or meta is held (those combinations belong to the browser, not to us). */
+export function hasModifier(e: KeyboardEvent): boolean {
+  return e.ctrlKey || e.altKey || e.metaKey;
+}
+
 function isTextField(el: EventTarget | null): el is HTMLElement {
   if (!(el instanceof HTMLElement)) return false;
   const tag = el.tagName;
@@ -75,14 +81,14 @@ const ARROWS = new Set<ActionId>(["move-up", "move-down", "move-left", "move-rig
 
 export function attachKeyboard(getViewport: () => Viewport): () => void {
   const onKeyDown = (e: KeyboardEvent): void => {
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (hasModifier(e)) return;
     // A modal (dialog/menu) handles its own Escape; every other key is ignored while it is open.
     if (document.querySelector("[data-modal]")) return;
     if (isTextField(e.target)) {
       if (e.key === "Escape") e.target.blur();
       return;
     }
-    const binding = findBinding(e.key);
+    const binding = findBindingIn(keymapStore.getState().map, e.key);
     if (!binding) return;
     // Enter on a focused button/link must still activate it
     if (binding.action === "confirm" && e.target instanceof HTMLElement && e.target.closest("button, a, summary, [role=button]")) return;

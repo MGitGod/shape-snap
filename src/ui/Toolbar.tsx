@@ -1,6 +1,7 @@
 import { useEditor } from "../editor/store";
 import { runAction, type Viewport } from "../input/keyboard";
-import { KEYMAP, keyLabel, type ActionId } from "../input/keymap";
+import { keyFor, keyLabel, type ActionId } from "../input/keymap";
+import { useKeymap } from "../input/keymapStore";
 
 type Item = { action: ActionId; label: string } | "sep";
 
@@ -35,11 +36,13 @@ const ITEMS: Item[] = [
   { action: "fit-view", label: "全体表示" },
 ];
 
-export function Toolbar({ getViewport, onOpenWorks, onOpenExport }: {
+export function Toolbar({ getViewport, onOpenWorks, onOpenExport, onOpenKeys }: {
   getViewport: () => Viewport;
   onOpenWorks?: () => void;
   onOpenExport?: () => void;
+  onOpenKeys?: () => void;
 }) {
+  const map = useKeymap();
   const multi = useEditor((s) => s.multiSelect);
   const solo = useEditor((s) => s.solo);
   const rotating = useEditor((s) => s.rotateMode);
@@ -51,7 +54,6 @@ export function Toolbar({ getViewport, onOpenWorks, onOpenExport }: {
       <div className="tools" role="toolbar" aria-label="道具">
         {ITEMS.map((it, i) => {
           if (it === "sep") return <span key={`sep-${i}`} className="tool-sep" aria-hidden="true" />;
-          const binding = KEYMAP.find((b) => b.action === it.action);
           const pressed = it.action === "multi-select" ? multi : it.action === "toggle-solo" ? solo : it.action === "rotate-mode" ? rotating : it.action === "line" ? drawing : it.action === "combine-view" ? combining : undefined;
           return (
             <button
@@ -65,12 +67,13 @@ export function Toolbar({ getViewport, onOpenWorks, onOpenExport }: {
                 e.currentTarget.blur();
               }}
             >
-              <kbd>{binding ? keyLabel(binding.key) : ""}</kbd> {it.label}
+              <kbd>{keyLabel(keyFor(map, it.action))}</kbd> {it.label}
             </button>
           );
         })}
       </div>
       <div className="toolbar-end" data-slot="toolbar-end">
+        <button type="button" className="btn" data-action="keys" onClick={(e) => { onOpenKeys?.(); e.currentTarget.blur(); }}>キー</button>
         <button type="button" className="btn" data-action="works" onClick={(e) => { onOpenWorks?.(); e.currentTarget.blur(); }}>作品</button>
         <button type="button" className="btn" data-action="export" onClick={(e) => { onOpenExport?.(); e.currentTarget.blur(); }}>書き出し</button>
       </div>

@@ -21,7 +21,7 @@ import {
 export interface ClickOptions { hitTolerance: number; handleTolerance: number; now?: number }
 
 const KIND_CHANGED_NOTICE = "自由な形に変わりました（Z で戻せます）";
-const GROUP_EDIT_NOTICE = "グループの中の図形は、解いてから直してください（U）";
+const GROUP_EDIT_NOTICE = "グループの中の図形は、解いてから直してください";
 
 /** Union of the source bounds (copies are not counted) of the given nodes. */
 function sourceUnion(nodes: SceneNode[]): Bounds | null {

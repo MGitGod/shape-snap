@@ -7,6 +7,7 @@ import { CanvasView } from "./ui/CanvasView";
 import { ExportDialog } from "./ui/ExportDialog";
 import { GridPanel } from "./ui/GridPanel";
 import { KeyHints } from "./ui/KeyHints";
+import { KeysDialog } from "./ui/KeysDialog";
 import { PropsPanel } from "./ui/PropsPanel";
 import { ShapeList } from "./ui/ShapeList";
 import { Toolbar } from "./ui/Toolbar";
@@ -23,7 +24,7 @@ export function App() {
   const notice = useEditor((s) => s.notice);
   const ready = useWork((s) => s.ready);
   const saveError = useWork((s) => s.saveError);
-  const [dialog, setDialog] = useState<"works" | "export" | null>(null);
+  const [dialog, setDialog] = useState<"works" | "export" | "keys" | null>(null);
   const closeDialog = useCallback(() => setDialog(null), []);
   useEffect(() => attachKeyboard(canvasViewport), []);
   useEffect(() => { void startSession(); }, []);
@@ -34,6 +35,7 @@ export function App() {
           getViewport={canvasViewport}
           onOpenWorks={() => setDialog("works")}
           onOpenExport={() => setDialog("export")}
+          onOpenKeys={() => setDialog("keys")}
         />
       </header>
       <main className="stage">
@@ -56,6 +58,7 @@ export function App() {
       )}
       {notice !== null && notice.startsWith("結合できませんでした") && <Banner message={notice} />}
       {dialog === "works" && <WorksMenu onClose={closeDialog} />}
+      {dialog === "keys" && <KeysDialog onClose={closeDialog} />}
       {dialog === "export" && <ExportDialog onClose={closeDialog} />}
     </div>
   );

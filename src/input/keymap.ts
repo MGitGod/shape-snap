@@ -25,7 +25,7 @@ const b = (
   key: string, action: ActionId, label: string, group: KeyBinding["group"], repeat = false,
 ): KeyBinding => ({ key, action, label, group, repeat });
 
-export const KEYMAP: KeyBinding[] = [
+export const DEFAULT_KEYMAP: KeyBinding[] = [
   b("l", "line", "線", "置く"),
   b("r", "place-rect", "四角を置く", "置く"),
   b("c", "place-ellipse", "円を置く", "置く"),
@@ -72,9 +72,98 @@ export const KEYMAP: KeyBinding[] = [
   b("i", "guide-v", "縦のガイド", "見る"),
 ];
 
+/** Alias kept for existing callers: the built-in map. */
+export const KEYMAP: KeyBinding[] = DEFAULT_KEYMAP;
+
+/** Keys that can never be reassigned, nor given to another action. */
+export const FIXED_KEYS: string[] = [
+  "Escape", "Enter", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Delete", "Backspace", " ",
+];
+
+export function normalizeKey(key: string): string {
+  return key.length === 1 ? key.toLowerCase() : key;
+}
+
+const ASSIGNABLE = /^[a-z0-9,./\-;'[\]\\=`]$/;
+
+export function isAssignableKey(key: string): boolean {
+  return ASSIGNABLE.test(normalizeKey(key));
+}
+
+export type KeyOverrides = Partial<Record<ActionId, string>>;
+
+export function findBindingIn(map: KeyBinding[], key: string): KeyBinding | undefined {
+  const k = normalizeKey(key);
+  return map.find((x) => x.key === k);
+}
+
 export function findBinding(key: string): KeyBinding | undefined {
-  const k = key.length === 1 ? key.toLowerCase() : key;
-  return KEYMAP.find((x) => x.key === k);
+  return findBindingIn(DEFAULT_KEYMAP, key);
+}
+
+/** The (first) key of an action; "" if the action is unknown. */
+export function keyFor(map: KeyBinding[], action: ActionId): string {
+  return map.find((x) => x.action === action)?.key ?? "";
+}
+
+function isFixedKey(key: string): boolean {
+  return FIXED_KEYS.includes(key);
+}
+
+export function applyOverrides(defaults: KeyBinding[], overrides: KeyOverrides): KeyBinding[] {
+  return defaults.map((b) => {
+    const k = overrides[b.action];
+    return k !== undefined && !isFixedKey(b.key) ? { ...b, key: k } : b;
+  });
+}
+
+function dropDefaults(defaults: KeyBinding[], o: KeyOverrides): KeyOverrides {
+  const out: KeyOverrides = {};
+  for (const [a, k] of Object.entries(o) as [ActionId, string][]) {
+    if (keyFor(defaults, a) !== k) out[a] = k;
+  }
+  return out;
+}
+
+export function sanitizeOverrides(defaults: KeyBinding[], raw: unknown): KeyOverrides {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  let out: KeyOverrides = {};
+  for (const [a, k] of Object.entries(raw as Record<string, unknown>)) {
+    const def = defaults.find((x) => x.action === a);
+    if (!def || isFixedKey(def.key) || typeof k !== "string" || !isAssignableKey(k)) continue;
+    out[def.action] = normalizeKey(k);
+  }
+  out = dropDefaults(defaults, out);
+  // drop every override that collides with another action's key, until none is left
+  for (;;) {
+    const map = applyOverrides(defaults, out);
+    const count = new Map<string, number>();
+    for (const b of map) count.set(b.key, (count.get(b.key) ?? 0) + 1);
+    const next: KeyOverrides = {};
+    for (const [a, k] of Object.entries(out) as [ActionId, string][]) {
+      if ((count.get(k) ?? 0) <= 1) next[a] = k;
+    }
+    if (Object.keys(next).length === Object.keys(out).length) return out;
+    out = next;
+  }
+}
+
+export interface RebindResult { overrides: KeyOverrides; swappedWith: ActionId | null; error: string | null }
+
+export function rebind(defaults: KeyBinding[], overrides: KeyOverrides, action: ActionId, key: string): RebindResult {
+  const fail = (error: string): RebindResult => ({ overrides, swappedWith: null, error });
+  const def = defaults.find((x) => x.action === action);
+  if (!def) return fail("このキーは使えません");
+  if (isFixedKey(def.key)) return fail("このキーは変えられません");
+  if (!isAssignableKey(key)) return fail("このキーは使えません");
+  const k = normalizeKey(key);
+  const map = applyOverrides(defaults, overrides);
+  const current = keyFor(map, action);
+  if (current === k) return { overrides, swappedWith: null, error: null };
+  const other = map.find((x) => x.key === k && x.action !== action);
+  const next: KeyOverrides = { ...overrides, [action]: k };
+  if (other) next[other.action] = current;
+  return { overrides: dropDefaults(defaults, next), swappedWith: other ? other.action : null, error: null };
 }
 
 const LABELS: Record<string, string> = {
@@ -96,48 +185,50 @@ export interface Hint { keys: string; label: string }
 
 const h = (keys: string, label: string): Hint => ({ keys, label });
 
-function drawingHints(s: EditorState): Hint[] {
+type Keys = (action: ActionId) => string;
+
+function drawingHints(s: EditorState, k: Keys): Hint[] {
   const start = s.drawing && s.drawing.points.length === 0 ? [h("グリッド点をクリック", "線を始める")] : [];
   return [
     ...start,
-    h("クリック / Space", "点を足す"),
-    h("Enter", "確定"),
+    h(`クリック / ${k("move-to-cursor")}`, "点を足す"),
+    h(k("confirm"), "確定"),
     h("最初の点をクリック", "閉じて確定"),
     h("右クリック / Backspace", "一つ戻す"),
-    h("Esc", "やめる"),
+    h(k("escape"), "やめる"),
   ];
 }
 
-function baseHints(s: EditorState): Hint[] {
-  if (s.drawing) return drawingHints(s);
+function baseHints(s: EditorState, k: Keys): Hint[] {
+  if (s.drawing) return drawingHints(s, k);
   if (s.rotateMode) {
-    return [h("← →", "15°ずつ回す"), h("↑ ↓", "1°ずつ回す"), h("V / Esc", "回転を終える")];
+    return [h("← →", "15°ずつ回す"), h("↑ ↓", "1°ずつ回す"), h(`${k("rotate-mode")} / ${k("escape")}`, "回転を終える")];
   }
   if (s.heldHandle !== null) {
     const node = primaryNode(s);
     const extra: Hint[] = [];
     const leaf = node ? editableLeaf(node) : null;
     if (leaf && s.heldHandle.startsWith("edge:") && (leaf.kind === "path" || leaf.kind === "polygon" || leaf.kind === "rect")) {
-      extra.push(h("Enter", "点を足す"));
+      extra.push(h(k("confirm"), "点を足す"));
     }
     if (leaf && leaf.kind === "path" && s.heldHandle.startsWith("vertex:")) {
-      if (leaf.smooth) extra.push(h("/", "角にする・丸める"));
-      extra.push(h("Delete", "点を消す"));
+      if (leaf.smooth) extra.push(h(k("corner-point"), "角にする・丸める"));
+      extra.push(h(k("delete"), "点を消す"));
     }
     if (s.heldHandle === "axis:0") {
-      return [h("クリック / 矢印", "軸を動かす"), h("W", "次のつまみ"), h("右クリック / Esc", "つかむのをやめる")];
+      return [h("クリック / 矢印", "軸を動かす"), h(k("next-handle"), "次のつまみ"), h(`右クリック / ${k("escape")}`, "つかむのをやめる")];
     }
     return [
-      h("クリック / 矢印 / Space", "つまみを動かす"),
-      h("W", "次のつまみ"),
+      h(`クリック / 矢印 / ${k("move-to-cursor")}`, "つまみを動かす"),
+      h(k("next-handle"), "次のつまみ"),
       ...extra,
-      h("右クリック / Esc", "つかむのをやめる"),
+      h(`右クリック / ${k("escape")}`, "つかむのをやめる"),
     ];
   }
   if (s.multiSelect) {
     return [
-      h("クリック", "足す・外す"), h("M", "複数選択を終える"), h("矢印", "動かす"),
-      h("G", "グループ"),
+      h("クリック", "足す・外す"), h(k("multi-select"), "複数選択を終える"), h("矢印", "動かす"),
+      h(k("group"), "グループ"),
       h("設定", "揃える・間隔"),
     ];
   }
@@ -146,33 +237,34 @@ function baseHints(s: EditorState): Hint[] {
     const isContainer = main !== undefined && (main.kind === "group" || main.kind === "repeat" || main.kind === "mirror");
     return [
       h("つまみをクリック", "つかむ"),
-      ...(main && editableLeaf(main)?.kind === "path" ? [h("S", "曲線・直線")] : []),
-      ...(isContainer ? [h("U", "解く・ばらす")] : []),
-      h("A", "連続配置"),
-      h("X", "対称"),
-      h("T", "足す・抜く"),
-      h("何もない点をクリック / Space / 矢印", "動かす"),
-      h("W", "つまみ"),
-      h("V", "回転"),
-      h(", .", "縮小・拡大"),
-      h("D", "複製"),
-      h("Delete", "消す"),
-      h("右クリック / Esc", "選択を外す"),
+      ...(main && editableLeaf(main)?.kind === "path" ? [h(k("smooth"), "曲線・直線")] : []),
+      ...(isContainer ? [h(k("ungroup"), "解く・ばらす")] : []),
+      h(k("repeat"), "連続配置"),
+      h(k("mirror"), "対称"),
+      h(k("role"), "足す・抜く"),
+      h(`何もない点をクリック / ${k("move-to-cursor")} / 矢印`, "動かす"),
+      h(k("next-handle"), "つまみ"),
+      h(k("rotate-mode"), "回転"),
+      h(`${k("scale-down")} ${k("scale-up")}`, "縮小・拡大"),
+      h(k("duplicate"), "複製"),
+      h(k("delete"), "消す"),
+      h(`右クリック / ${k("escape")}`, "選択を外す"),
     ];
   }
   return [
-    h("R", "四角"),
-    h("C", "円"),
-    h("P", "多角形"),
-    h("L", "線"),
-    h("図形をクリック / Q / E", "選ぶ"),
+    h(k("place-rect"), "四角"),
+    h(k("place-ellipse"), "円"),
+    h(k("place-polygon"), "多角形"),
+    h(k("line"), "線"),
+    h(`図形をクリック / ${k("prev-shape")} / ${k("next-shape")}`, "選ぶ"),
     h("ホイール", "拡大縮小"),
     h("矢印", "表示を動かす"),
   ];
 }
 
-export function hintsFor(s: EditorState): Hint[] {
-  const base = baseHints(s);
-  const hints = s.combineView ? [h("3", "結合の表示を終える"), ...base] : base;
+export function hintsFor(s: EditorState, map: KeyBinding[] = DEFAULT_KEYMAP): Hint[] {
+  const k: Keys = (action) => keyLabel(keyFor(map, action));
+  const base = baseHints(s, k);
+  const hints = s.combineView ? [h(k("combine-view"), "結合の表示を終える"), ...base] : base;
   return s.notice ? [{ keys: "", label: s.notice }, ...hints] : hints;
 }

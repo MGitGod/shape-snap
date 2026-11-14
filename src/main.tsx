@@ -4,6 +4,7 @@ import { App } from "./App";
 import { combineDocument } from "./core/combine";
 import { expandNode } from "./core/tree";
 import { editorStore } from "./editor/store";
+import { loadKeymap } from "./input/keymapStore";
 import { documentToSvg, type ExportOptions } from "./render/svg";
 import "./styles.css";
 
@@ -18,6 +19,8 @@ if (import.meta.env.DEV) {
     getSvg: (opts: ExportOptions) => documentToSvg(editorStore.getState().history.present, opts),
   };
 }
+
+loadKeymap();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root not found");

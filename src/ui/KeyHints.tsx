@@ -1,5 +1,6 @@
 import { snapPointToDoc } from "../core/geometry";
 import { hintsFor } from "../input/keymap";
+import { useKeymap } from "../input/keymapStore";
 import { currentDoc } from "../editor/state";
 import { useEditor } from "../editor/store";
 
@@ -9,7 +10,8 @@ function fmt(v: number): string {
 
 export function KeyHints() {
   const state = useEditor((s) => s);
-  const hints = hintsFor(state);
+  const map = useKeymap();
+  const hints = hintsFor(state, map);
   const target = state.cursor ? snapPointToDoc(state.cursor, currentDoc(state)) : null;
   return (
     <div className="key-hints" aria-live="polite">

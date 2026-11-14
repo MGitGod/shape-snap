@@ -226,3 +226,15 @@ body {
   color: var(--subtract); font-size: 0.8rem; white-space: nowrap;
 }
 .modal-note { color: var(--sub); font-size: 0.85rem; margin: 4px 0; }
+
+/* ---- Stage 5: key settings dialog ---- */
+.keys-modal { width: min(560px, 94vw); }
+.keys-group h3 { margin: 12px 0 4px; font-size: 0.9rem; color: var(--sub); }
+.key-list { list-style: none; margin: 0; padding: 0; }
+.key-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--line); }
+.key-row-label { flex: 1 1 10em; }
+.key-row kbd { background: var(--key-bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; font-family: inherit; }
+.key-btn { min-width: 64px; }
+.key-fixed { color: var(--sub); font-size: 0.85rem; }
+.key-wait { flex-basis: 100%; color: var(--accent); }
+.key-msg { flex-basis: 100%; margin: 0 0 6px; }

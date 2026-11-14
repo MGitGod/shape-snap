@@ -1,6 +1,8 @@
 import { addGuideAtCursor, clearGuidesAction, removeGuideAction, setGridProp } from "../editor/actions";
 import { currentDoc } from "../editor/state";
 import { dispatch, editorStore, useEditor } from "../editor/store";
+import { keyFor, keyLabel } from "../input/keymap";
+import { useKeymap } from "../input/keymapStore";
 import { SliderField } from "./SliderField";
 
 /** World point at the middle of the visible canvas, for guides added from the panel. */
@@ -12,6 +14,7 @@ function canvasCentre(): { x: number; y: number } {
 }
 
 export function GridPanel() {
+  const map = useKeymap();
   const grid = useEditor((s) => currentDoc(s).grid);
   const guides = useEditor((s) => currentDoc(s).guides) ?? [];
   return (
@@ -75,7 +78,7 @@ export function GridPanel() {
             e.currentTarget.blur();
           }}
         >
-          横のガイドを足す <kbd>-</kbd>
+          横のガイドを足す <kbd>{keyLabel(keyFor(map, "guide-h"))}</kbd>
         </button>
         <button
           type="button"
@@ -86,7 +89,7 @@ export function GridPanel() {
             e.currentTarget.blur();
           }}
         >
-          縦のガイドを足す <kbd>I</kbd>
+          縦のガイドを足す <kbd>{keyLabel(keyFor(map, "guide-v"))}</kbd>
         </button>
         {guides.length > 0 && (
           <button

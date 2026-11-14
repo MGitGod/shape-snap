@@ -206,6 +206,21 @@ test("stage 1 walkthrough with clicks and single keys only", async ({ page }) =>
     await readStream((await merged.createReadStream()) as unknown as AsyncIterable<Uint8Array> | null));
   expect(mergedSvg).toContain("<path");
   expect(mergedSvg).not.toContain("<ellipse");
+
+  // 13. change one key, work with the new key, then put everything back
+  await page.keyboard.press("Escape");
+  await page.locator('[data-action="keys"]').click();
+  await page.locator('[data-key-action="place-polygon"]').click();
+  await page.keyboard.press("'");
+  await page.getByRole("button", { name: "閉じる" }).click();
+  const polygons = (await snap(page)).nodes.filter((n) => n.kind === "polygon").length;
+  await place(page, "'", 0, 150);
+  expect((await snap(page)).nodes.filter((n) => n.kind === "polygon").length).toBe(polygons + 1);
+  await page.locator('[data-action="keys"]').click();
+  await page.getByRole("button", { name: "全部を初めに戻す" }).click();
+  await page.getByRole("button", { name: "戻す", exact: true }).click();
+  await expect(page.locator('[data-key-action="place-polygon"] kbd')).toHaveText("P");
+  await page.getByRole("button", { name: "閉じる" }).click();
 });
 
 for (const size of [{ width: 1280, height: 800 }, { width: 1024, height: 768 }]) {
