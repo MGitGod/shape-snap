@@ -189,6 +189,23 @@ test("stage 1 walkthrough with clicks and single keys only", async ({ page }) =>
   await page.locator('[data-prop="count"] input[type="number"]').fill("3");
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-node-id] > :is(rect, ellipse, polygon, path)")).toHaveCount(s.nodes.length + 2);
+
+  // 12. make a circle a subtract shape and export everything merged into outlines
+  const circleId = byName(s, "円 2").id;
+  await page.locator(`[data-list-id="${circleId}"] .row-name`).click();
+  await page.keyboard.press("t");
+  expect((await snap(page)).nodes.find((n) => n.id === circleId)).toMatchObject({ role: "subtract" });
+  await page.getByRole("button", { name: "書き出し", exact: true }).click();
+  await page.getByRole("radio", { name: "SVG", exact: true }).check();
+  await expect(page.getByTestId("export-combine")).toBeChecked();
+  const [merged] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "書き出す" }).click(),
+  ]);
+  const mergedSvg = new TextDecoder().decode(
+    await readStream((await merged.createReadStream()) as unknown as AsyncIterable<Uint8Array> | null));
+  expect(mergedSvg).toContain("<path");
+  expect(mergedSvg).not.toContain("<ellipse");
 });
 
 for (const size of [{ width: 1280, height: 800 }, { width: 1024, height: 768 }]) {

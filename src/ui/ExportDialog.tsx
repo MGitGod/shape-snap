@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { hasSubtract } from "../core/combine";
 import { exportBounds, documentToSvg, type ExportOptions } from "../render/svg";
 import { useEditor } from "../editor/store";
 import { downloadBlob, safeFileName, serializeDocument } from "../io/files";
@@ -18,6 +19,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [bg, setBg] = useState<Bg>("transparent");
   const [color, setColor] = useState("#ffffff");
   const [longSide, setLongSide] = useState(1024);
+  const subtractAny = hasSubtract(doc);
+  const [combine, setCombine] = useState(subtractAny);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -49,6 +52,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           area: "content",
           margin,
           background: bg === "transparent" ? null : bg === "white" ? "#ffffff" : color,
+          combine,
         };
         const svg = documentToSvg(doc, opts);
         if (format === "svg") {
@@ -110,6 +114,14 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 />
               )}
             </fieldset>
+            <label className="check-row">
+              <input
+                type="checkbox" data-testid="export-combine" checked={combine}
+                onChange={(e) => setCombine(e.target.checked)}
+              />
+              一つの輪郭にまとめる
+            </label>
+            {!combine && subtractAny && <p className="modal-note">抜く図形は書き出されません</p>}
             {!colorOk && <p className="modal-error">色コードは #fff か #ffffff の形で入れてください</p>}
           </>
         )}

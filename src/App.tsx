@@ -20,6 +20,7 @@ function canvasViewport(): { width: number; height: number } {
 
 export function App() {
   const focusArea = useEditor((s) => s.focusArea);
+  const notice = useEditor((s) => s.notice);
   const ready = useWork((s) => s.ready);
   const saveError = useWork((s) => s.saveError);
   const [dialog, setDialog] = useState<"works" | "export" | null>(null);
@@ -53,6 +54,7 @@ export function App() {
           onAction={exportWorkFile}
         />
       )}
+      {notice !== null && notice.startsWith("結合できませんでした") && <Banner message={notice} />}
       {dialog === "works" && <WorksMenu onClose={closeDialog} />}
       {dialog === "export" && <ExportDialog onClose={closeDialog} />}
     </div>

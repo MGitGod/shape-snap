@@ -2,7 +2,7 @@ import {
   groupSelection, mirrorSelection, repeatSelection, ungroupSelection,
   addGuideAtCursor, convertToPath, cycleFocus, cycleHandle, cycleSelection, deleteSelection, duplicateSelection, escape, fitView,
   gridCoarser, gridFiner, finishLine, insertPointAtHandle, moveToCursor, nudge, placeShape, redoAction, reorderSelection,
-  scaleSelection, startLine, toggleCornerAtHandle, toggleSmooth, toggleFillNoneSelection, toggleLocked, toggleRotateMode, toggleMultiSelect, toggleSolo, toggleVisible, undoAction,
+  scaleSelection, startLine, toggleCombineView, toggleRole, toggleCornerAtHandle, toggleSmooth, toggleFillNoneSelection, toggleLocked, toggleRotateMode, toggleMultiSelect, toggleSolo, toggleVisible, undoAction,
 } from "../editor/actions";
 import { dispatch, editorStore } from "../editor/store";
 import { findBinding, type ActionId } from "./keymap";
@@ -60,6 +60,8 @@ export function runAction(action: ActionId, viewport: Viewport): void {
     case "ungroup": dispatch((s) => ungroupSelection(s)); break;
     case "repeat": dispatch((s) => repeatSelection(s)); break;
     case "mirror": dispatch((s) => mirrorSelection(s)); break;
+    case "role": dispatch((s) => toggleRole(s)); break;
+    case "combine-view": dispatch(toggleCombineView); break;
   }
 }
 

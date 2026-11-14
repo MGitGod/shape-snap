@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { combineDocument } from "./core/combine";
 import { expandNode } from "./core/tree";
 import { editorStore } from "./editor/store";
 import { documentToSvg, type ExportOptions } from "./render/svg";
@@ -13,6 +14,7 @@ if (import.meta.env.DEV) {
       const node = editorStore.getState().history.present.nodes.find((n) => n.id === id);
       return node ? expandNode(node) : [];
     },
+    combine: () => combineDocument(editorStore.getState().history.present),
     getSvg: (opts: ExportOptions) => documentToSvg(editorStore.getState().history.present, opts),
   };
 }

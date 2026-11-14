@@ -5,7 +5,7 @@ import type { Document, Point, SceneNode } from "../../src/core/types";
 import {
   clickCanvas, cycleFocus, cycleHandle, cycleSelection, deleteSelection, duplicateSelection, fitView,
   gridCoarser, gridFiner, moveToCursor, nudge, panBy, placeShape, redoAction, setAnchor, setCursor,
-  convertToPath, addGuideAtCursor, escape, scaleSelection, toggleRotateMode, setNodeProp, toggleLocked, toggleMultiSelect, toggleSolo, undoAction, zoomAt, loadDocument,
+  convertToPath, addGuideAtCursor, escape, scaleSelection, toggleRotateMode, setNodeProp, toggleLocked, toggleMultiSelect, toggleSolo, undoAction, zoomAt, loadDocument, toggleRole, toggleCombineView,
 } from "../../src/editor/actions";
 import { createEditorState, currentDoc, primaryNode, type EditorState } from "../../src/editor/state";
 import { leafOf } from "../leaf";
@@ -407,5 +407,52 @@ describe("rotate mode, scale and guides", () => {
     s = undoAction(s);
     expect(currentDoc(s).guides ?? []).toHaveLength(0);
     expect(addGuideAtCursor(createEditorState(), "h").notice).toBe("カーソルをキャンバスに置いてから押してください");
+  });
+});
+
+describe("toggleRole", () => {
+  it("flips the role of the selected shape and undo restores it", () => {
+    let s = stateWith([rect("a", 0, 0)], ["a"]);
+    s = toggleRole(s);
+    expect(getNode(currentDoc(s), "a")?.role).toBe("subtract");
+    expect(s.notice).toContain("抜く図形にしました");
+    expect(s.history.past).toHaveLength(1);
+    s = undoAction(s);
+    expect(getNode(currentDoc(s), "a")?.role).toBe("add");
+    s = toggleRole(toggleRole(s));
+    expect(getNode(currentDoc(s), "a")?.role).toBe("add");
+  });
+  it("changes only the topmost selected shape", () => {
+    let s = stateWith([rect("a", 0, 0), rect("b", 40, 0)], ["b", "a"]);
+    s = toggleRole(s);
+    expect(getNode(currentDoc(s), "b")?.role).toBe("subtract");
+    expect(getNode(currentDoc(s), "a")?.role).toBe("add");
+  });
+  it("asks for a selection", () => {
+    const s = toggleRole(stateWith([rect("a", 0, 0)]));
+    expect(s.notice).toBe("図形を選んでから T を押してください");
+    expect(s.history.past).toHaveLength(0);
+  });
+  it("leaves a locked shape alone", () => {
+    let s = stateWith([rect("a", 0, 0)], ["a"]);
+    s = toggleLocked(s);
+    const before = s.history.past.length;
+    s = toggleRole(s);
+    expect(getNode(currentDoc(s), "a")?.role).toBe("add");
+    expect(s.history.past).toHaveLength(before);
+  });
+});
+
+describe("toggleCombineView", () => {
+  it("flips the flag without touching history, and loadDocument resets it", () => {
+    let s = stateWith([rect("a", 0, 0)], ["a"]);
+    s = toggleCombineView(s);
+    expect(s.combineView).toBe(true);
+    expect(s.history.past).toHaveLength(0);
+    s = toggleCombineView(s);
+    expect(s.combineView).toBe(false);
+    s = toggleCombineView(s);
+    s = loadDocument(s, createDocument());
+    expect(s.combineView).toBe(false);
   });
 });

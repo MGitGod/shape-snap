@@ -2,11 +2,12 @@ import { commit, redo, undo } from "../core/history";
 import {
   alignNodes, distributeNodes, toggleFillNone, type AlignMode,
 } from "../core/arrange";
+import { combineDocument } from "../core/combine";
 import { anchorPoint, hitStack, nodesBounds, snapPointToDoc, snapValue, toWorld, type Bounds } from "../core/geometry";
 import { findHandleAt, moveHandle, nextGridLine, nextHandleId, nudgeHandle, toPath } from "../core/handles";
 import {
   addGuide, addNode, clearGuides, createNode, createPathFromPoints, DEFAULT_STYLE, duplicateNodes, groupNodes, insertPathPoint,
-  removeGuide, removeNodes, removePathPoint, reorderNode, setGrid, setPathCorner, translateNodes, ungroupNode, updateNode,
+  removeGuide, removeNodes, removePathPoint, reorderNode, setGrid, setRole, setPathCorner, translateNodes, ungroupNode, updateNode,
   wrapMirror, wrapRepeat,
 } from "../core/model";
 import {
@@ -489,7 +490,7 @@ export function cycleFocus(s: EditorState): EditorState {
 
 export function loadDocument(s: EditorState, doc: Document): EditorState {
   const fresh = createEditorState(doc);
-  return { ...fresh, rotateMode: false, view: s.view, anchor: s.anchor, focusArea: s.focusArea, cursor: s.cursor };
+  return { ...fresh, rotateMode: false, combineView: false, view: s.view, anchor: s.anchor, focusArea: s.focusArea, cursor: s.cursor };
 }
 
 // ---- lines ------------------------------------------------------------
@@ -704,4 +705,35 @@ export function setMirrorMode(s: EditorState, mode: MirrorMode, now?: number): E
   const node = primaryNode(s);
   if (!node || node.kind !== "mirror") return s;
   return withDoc(s, updateNode(currentDoc(s), node.id, (n) => (n.kind === "mirror" ? { ...n, mode } : n)), "prop:mode", now);
+}
+
+// ---- add / subtract ------------------------------------------------------
+
+export function toggleRole(s: EditorState, now?: number): EditorState {
+  if (s.drawing) return s;
+  if (s.selection.length === 0) return { ...s, notice: "図形を選んでから T を押してください" };
+  const doc = currentDoc(s);
+  const picked = doc.nodes.filter((n) => s.selection.includes(n.id) && !n.locked);
+  const top = picked[picked.length - 1];
+  if (!top) return s;
+  const role = top.role === "subtract" ? "add" : "subtract";
+  return {
+    ...withDoc(s, setRole(doc, [top.id], role), undefined, now),
+    notice: role === "subtract" ? "抜く図形にしました。奥にある図形をくり抜きます（3 で結合を表示）" : null,
+  };
+}
+
+export function toggleCombineView(s: EditorState): EditorState {
+  if (s.drawing) return s;
+  if (s.combineView) return { ...s, combineView: false };
+  const r = combineDocument(currentDoc(s));
+  if (r.ok) return { ...s, combineView: true, notice: null };
+  return failCombine(s, r.message, r.nodeId);
+}
+
+/** Leave the combined view, say which shape could not be merged, and select it. */
+export function failCombine(s: EditorState, message: string, nodeId: string | null): EditorState {
+  const node = nodeId === null ? undefined : currentDoc(s).nodes.find((n) => n.id === nodeId);
+  const next: EditorState = { ...s, combineView: false, notice: node ? `${message}: ${node.name}` : message };
+  return node ? { ...next, selection: [node.id], heldHandle: null } : next;
 }

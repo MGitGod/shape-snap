@@ -1,18 +1,48 @@
-import { createElement, useEffect, useLayoutEffect, useRef } from "react";
+import { createElement, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { MouseEvent } from "react";
 import { snapPointToDoc, worldOutlines } from "../core/geometry";
 import { editableLeaf, expandNode, nodeCenter, sourceLeaves } from "../core/tree";
 import { getHandles } from "../core/handles";
+import { combineDocument } from "../core/combine";
 import type { Point } from "../core/types";
-import { clickCanvas, fitView, setCursor, zoomAt } from "../editor/actions";
+import { clickCanvas, failCombine, fitView, setCursor, zoomAt } from "../editor/actions";
 import { currentDoc } from "../editor/state";
 import { dispatch, editorStore, useEditor } from "../editor/store";
-import { nodeToSvgList } from "../render/svg";
+import { itemToSvg, nodeToSvgList, type SvgElementSpec } from "../render/svg";
 
 const HANDLE_PX = 14;
 const CORNER_PX = 16;
 const VERTEX_PX = 16;
 const AXIS_PX = 18;
+
+function camel(spec: SvgElementSpec): Record<string, string | number> {
+  const attrs: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(spec.attrs)) {
+    attrs[k.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] = v;
+  }
+  return attrs;
+}
+
+/** A subtract shape is drawn as a hatched, dotted-outline ghost instead of a solid fill. */
+function subtractProps(spec: SvgElementSpec): Record<string, string | number> {
+  const attrs = camel(spec);
+  const open = attrs.fill === "none";
+  return {
+    ...attrs,
+    fill: open ? "none" : "url(#subtract-hatch)",
+    stroke: "var(--subtract)",
+    strokeWidth: 2,
+    strokeDasharray: "6 4",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    vectorEffect: "non-scaling-stroke",
+    opacity: 1,
+  };
+}
+
+function outlinePoints(points: Point[]): string {
+  return points.map((p) => `${p.x},${p.y}`).join(" ");
+}
 
 export function CanvasView() {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -24,7 +54,14 @@ export function CanvasView() {
   const rotateMode = useEditor((s) => s.rotateMode);
   const cursor = useEditor((s) => s.cursor);
   const drawing = useEditor((s) => s.drawing);
+  const combineView = useEditor((s) => s.combineView);
   const { zoom, panX, panY } = view;
+
+  // recomputed only when the drawing itself changes
+  const combined = useMemo(() => (combineView ? combineDocument(doc) : null), [combineView, doc]);
+  useEffect(() => {
+    if (combined && !combined.ok) dispatch((s) => failCombine(s, combined.message, combined.nodeId));
+  }, [combined]);
 
   // screen position inside the svg -> world, using the latest view from the store
   const toWorld = (e: { clientX: number; clientY: number }): Point => {
@@ -86,6 +123,11 @@ export function CanvasView() {
         click(e, "right");
       }}
     >
+      <defs>
+        <pattern id="subtract-hatch" patternUnits="userSpaceOnUse" width={8} height={8} patternTransform="rotate(45)">
+          <line x1={0} y1={0} x2={0} y2={8} stroke="var(--subtract)" strokeWidth={2} opacity={0.35} />
+        </pattern>
+      </defs>
       {doc.grid.visible && (
         <>
           <defs>
@@ -122,21 +164,41 @@ export function CanvasView() {
         </>
       )}
       <g transform={`translate(${panX} ${panY}) scale(${zoom})`}>
-        {doc.nodes.filter((n) => n.visible).map((n) => (
+        {combineView && combined && combined.ok && (
+          <g data-testid="combined">
+            {combined.items.map((item, i) => {
+              const spec = itemToSvg(item);
+              return createElement(spec.tag, {
+                ...camel(spec), key: `combined-${i}`, "data-combined-kind": item.kind, pointerEvents: "none",
+              });
+            })}
+          </g>
+        )}
+        {!combineView && doc.nodes.filter((n) => n.visible).map((n) => (
           <g
             key={n.id}
             data-node-id={n.id}
+            data-role={n.role === "subtract" ? "subtract" : undefined}
             opacity={solo && !selection.includes(n.id) ? 0.25 : undefined}
           >
-            {nodeToSvgList(n).map((spec, i) => {
-              const attrs: Record<string, string | number> = {};
-              for (const [k, v] of Object.entries(spec.attrs)) {
-                attrs[k.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] = v;
-              }
-              return createElement(spec.tag, { ...attrs, key: `${n.id}:${i}` });
-            })}
+            {nodeToSvgList(n).map((spec, i) =>
+              createElement(spec.tag, { ...(n.role === "subtract" ? subtractProps(spec) : camel(spec)), key: `${n.id}:${i}` }))}
           </g>
         ))}
+        {combineView && selected.filter((n) => n.visible && n.role === "subtract").flatMap((n) =>
+          worldOutlines(n).map((o, i) => (
+            <polyline
+              key={`sub-${n.id}:${i}`}
+              data-subtract-outline={n.id}
+              points={outlinePoints(o.closed && o.points[0] ? [...o.points, o.points[0]] : o.points)}
+              fill="none"
+              stroke="var(--subtract)"
+              strokeWidth={2}
+              strokeDasharray="6 4"
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          )))}
         {selected.filter((n) => n.visible).flatMap((n) => {
           const sourceIds = new Set(sourceLeaves(n).map((l) => l.id));
           const leaves = expandNode(n);
@@ -326,6 +388,12 @@ export function CanvasView() {
             </g>
           );
         })}
+      {combineView && (
+        <g data-testid="combine-badge" pointerEvents="none">
+          <rect x={12} y={12} width={196} height={28} rx={6} fill="var(--panel)" stroke="var(--accent)" strokeWidth={1.5} />
+          <text x={22} y={31} fill="var(--ink)" fontSize={14} fontWeight={700}>結合を表示中（3 で戻る）</text>
+        </g>
+      )}
     </svg>
   );
 }

@@ -150,7 +150,7 @@ function svgOpen(b: Bounds, background: string | null): string[] {
   return lines;
 }
 
-function itemToSvg(item: CombinedItem): SvgElementSpec {
+export function itemToSvg(item: CombinedItem): SvgElementSpec {
   const attrs: Record<string, string | number> = { d: item.d };
   const { fill, stroke, strokeWidth, opacity } = item.style;
   attrs.fill = fill === null ? "none" : fill;

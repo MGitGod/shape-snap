@@ -32,6 +32,7 @@ const OPS: Array<{ action: ActionId; label: string }> = [
 function opsFor(node: SceneNode | undefined, selectedCount: number): Array<{ action: ActionId; label: string }> {
   const extra: Array<{ action: ActionId; label: string }> = [];
   if (selectedCount >= 2) extra.push({ action: "group", label: "グループ" });
+  extra.push({ action: "role", label: node ? (node.role === "subtract" ? "足すにする" : "抜くにする") : "足す・抜く" });
   if (node) {
     if (node.kind === "group") extra.push({ action: "ungroup", label: "解く" });
     else if (node.kind === "repeat" || node.kind === "mirror") extra.push({ action: "ungroup", label: "ばらす" });

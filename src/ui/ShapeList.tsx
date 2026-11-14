@@ -90,6 +90,7 @@ function Row({ node, selected }: { node: SceneNode; selected: boolean }) {
       ) : (
         <span className="row-name">{node.name}{summary(node) && <span className="row-summary" data-row-summary>{summary(node)}</span>}</span>
       )}
+      {node.role === "subtract" && <span className="role-badge" data-role-badge="subtract">抜く</span>}
       {!editing && (
         <>
           <button

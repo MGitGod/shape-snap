@@ -111,3 +111,19 @@ describe("stage 2 line keys", () => {
     expect(hintsFor(createEditorState()).map((x) => x.keys)).toContain("L");
   });
 });
+
+describe("stage 4 combine keys", () => {
+  it("binds T and 3, without repeating a key", () => {
+    expect(findBinding("t")?.action).toBe("role");
+    expect(findBinding("T")?.action).toBe("role");
+    expect(findBinding("3")?.action).toBe("combine-view");
+    const keys = KEYMAP.map((b) => b.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+  it("puts the combined view hint first and adds T to the selected hints", () => {
+    const h = hintsFor({ ...withShape(), combineView: true });
+    expect(h[0]).toEqual({ keys: "3", label: "結合の表示を終える" });
+    expect(hintsFor(withShape())).toContainEqual({ keys: "T", label: "足す・抜く" });
+    expect(hintsFor(withShape())[0]).toEqual({ keys: "つまみをクリック", label: "つかむ" });
+  });
+});

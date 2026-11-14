@@ -10,7 +10,8 @@ export type ActionId =
   | "toggle-visible" | "toggle-locked" | "toggle-solo"
   | "fit-view" | "grid-finer" | "grid-coarser"
   | "scale-down" | "scale-up" | "rotate-mode" | "fill-none" | "to-path" | "guide-h" | "guide-v"
-  | "group" | "ungroup" | "repeat" | "mirror";
+  | "group" | "ungroup" | "repeat" | "mirror"
+  | "role" | "combine-view";
 
 export interface KeyBinding {
   key: string;
@@ -64,6 +65,8 @@ export const KEYMAP: KeyBinding[] = [
   b("u", "ungroup", "解く・ばらす", "編集"),
   b("a", "repeat", "連続配置", "置く"),
   b("x", "mirror", "対称", "置く"),
+  b("t", "role", "足す・抜く", "編集"),
+  b("3", "combine-view", "結合を表示", "見る"),
   b("Enter", "confirm", "確定", "選ぶ"),
   b("-", "guide-h", "横のガイド", "見る"),
   b("i", "guide-v", "縦のガイド", "見る"),
@@ -147,6 +150,7 @@ function baseHints(s: EditorState): Hint[] {
       ...(isContainer ? [h("U", "解く・ばらす")] : []),
       h("A", "連続配置"),
       h("X", "対称"),
+      h("T", "足す・抜く"),
       h("何もない点をクリック / Space / 矢印", "動かす"),
       h("W", "つまみ"),
       h("V", "回転"),
@@ -168,6 +172,7 @@ function baseHints(s: EditorState): Hint[] {
 }
 
 export function hintsFor(s: EditorState): Hint[] {
-  const hints = baseHints(s);
+  const base = baseHints(s);
+  const hints = s.combineView ? [h("3", "結合の表示を終える"), ...base] : base;
   return s.notice ? [{ keys: "", label: s.notice }, ...hints] : hints;
 }

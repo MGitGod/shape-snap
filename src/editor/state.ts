@@ -21,6 +21,7 @@ export interface EditorState {
   lastClick: Point | null;
   notice: string | null;
   drawing: { points: Point[] } | null;   // a line being drawn: world points, already snapped
+  combineView: boolean;                  // show the merged outlines instead of the shapes
 }
 
 export function createEditorState(doc?: Document): EditorState {
@@ -38,6 +39,7 @@ export function createEditorState(doc?: Document): EditorState {
     lastClick: null,
     notice: null,
     drawing: null,
+    combineView: false,
   };
 }
 
