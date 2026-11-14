@@ -4,6 +4,7 @@ import {
   translateNodes, reorderNode, duplicateNodes, setGrid, nextName, DEFAULT_STYLE,
 } from "../../src/core/model";
 import type { Document } from "../../src/core/types";
+import { leafOf } from "../leaf";
 
 function docWith(...ids: string[]): Document {
   let doc = createDocument();
@@ -99,9 +100,9 @@ describe("translateNodes", () => {
   it("moves only the targeted node", () => {
     const doc = docWith("a", "b");
     const next = translateNodes(doc, ["a"], 20, -20);
-    expect(next.nodes[0]?.transform).toEqual({ x: 120, y: 80, rotation: 0 });
-    expect(next.nodes[1]?.transform).toEqual({ x: 100, y: 100, rotation: 0 });
-    expect(doc.nodes[0]?.transform.x).toBe(100);
+    expect(leafOf(next.nodes[0]).transform).toEqual({ x: 120, y: 80, rotation: 0 });
+    expect(leafOf(next.nodes[1]).transform).toEqual({ x: 100, y: 100, rotation: 0 });
+    expect(leafOf(doc.nodes[0]).transform.x).toBe(100);
   });
 });
 
@@ -135,7 +136,7 @@ describe("duplicateNodes", () => {
     expect(next.nodes.length).toBe(3);
     const copy = next.nodes[2];
     expect(copy?.id).toBe("n1");
-    expect(copy?.transform).toEqual({ x: 120, y: 120, rotation: 0 });
+    expect(leafOf(copy).transform).toEqual({ x: 120, y: 120, rotation: 0 });
     expect(copy?.name).toBe("四角 3");
     expect(doc.nodes.length).toBe(2);
   });

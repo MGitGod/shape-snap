@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { Anchor, GridSettings, PathNode, SceneNode } from "../core/types";
-import { toggleFillNone } from "../core/arrange";
+import { mapSourceLeaves, sourceLeaves } from "../core/tree";
+import type { Anchor, GridSettings, LeafNode, PathNode, SceneNode, Style } from "../core/types";
+import { toggleLeafFillNone } from "../core/arrange";
 import { setAnchor, setNodeProp, toggleClosed } from "../editor/actions";
 import { runAction, type Viewport } from "../input/keyboard";
 import { KEYMAP, keyLabel, type ActionId } from "../input/keymap";
@@ -107,6 +108,14 @@ function isTextField(el: EventTarget | null): boolean {
   return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
 }
 
+/** A patch for `node` that restyles every source leaf (the node itself for a leaf, its inner shapes for a container). */
+function restyle(node: SceneNode, style: (leaf: LeafNode) => Style): Partial<SceneNode> {
+  const next = mapSourceLeaves(node, (leaf) => ({ ...leaf, style: style(leaf) }));
+  if (next.kind === "group") return { children: next.children };
+  if (next.kind === "repeat" || next.kind === "mirror") return { child: next.child };
+  return { style: next.style };
+}
+
 function tidy(v: number): number {
   return Number(v.toFixed(4));
 }
@@ -116,6 +125,7 @@ function PropsBody({ node, grid, getViewport }: { node: SceneNode; grid: GridSet
   const focusArea = useEditor((s) => s.focusArea);
   const [active, setActive] = useState(0);
   const defs = propDefsFor(node, grid);
+  const lead = sourceLeaves(node)[0];
   const rootRef = useRef<HTMLDivElement | null>(null);
   const latest = useRef({ node, defs, active });
   latest.current = { node, defs, active };
@@ -160,19 +170,23 @@ function PropsBody({ node, grid, getViewport }: { node: SceneNode; grid: GridSet
 
   return (
     <div ref={rootRef}>
-      <ColorField
-        kind="fill"
-        label="塗りの色"
-        value={node.style.fill}
-        onChange={(v) =>
-          apply("fill", { style: v === null ? toggleFillNone(node).style : { ...node.style, fill: v } })}
-      />
-      <ColorField
-        kind="stroke"
-        label="線の色"
-        value={node.style.stroke}
-        onChange={(v) => apply("stroke", { style: { ...node.style, stroke: v } })}
-      />
+      {lead && (
+        <ColorField
+          kind="fill"
+          label="塗りの色"
+          value={lead.style.fill}
+          onChange={(v) =>
+            apply("fill", restyle(node, (leaf) => (v === null ? toggleLeafFillNone(leaf).style : { ...leaf.style, fill: v })))}
+        />
+      )}
+      {lead && (
+        <ColorField
+          kind="stroke"
+          label="線の色"
+          value={lead.style.stroke}
+          onChange={(v) => apply("stroke", restyle(node, (leaf) => ({ ...leaf.style, stroke: v })))}
+        />
+      )}
       <OpButtons getViewport={getViewport} />
       {node.kind === "path" && <PathButtons node={node} getViewport={getViewport} />}
       {defs.map((def, i) => (

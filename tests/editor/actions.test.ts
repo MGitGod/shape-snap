@@ -8,6 +8,7 @@ import {
   convertToPath, addGuideAtCursor, escape, scaleSelection, toggleRotateMode, setNodeProp, toggleLocked, toggleMultiSelect, toggleSolo, undoAction, zoomAt, loadDocument,
 } from "../../src/editor/actions";
 import { createEditorState, currentDoc, primaryNode, type EditorState } from "../../src/editor/state";
+import { leafOf } from "../leaf";
 
 const opts = { hitTolerance: 6, handleTolerance: 8 };
 const L = (s: EditorState, p: Point) => clickCanvas(s, p, "left", opts);
@@ -30,20 +31,20 @@ describe("placeShape", () => {
     expect(currentDoc(s).nodes).toHaveLength(1);
     const n = currentDoc(s).nodes[0]!;
     expect(s.selection).toEqual([n.id]);
-    expect(n.transform).toMatchObject({ x: 60, y: 60 });
+    expect(leafOf(n).transform).toMatchObject({ x: 60, y: 60 });
     expect(s.heldHandle).toBeNull();
   });
 
   it("uses the snapped fallback centre when there is no cursor", () => {
     const s = placeShape(createEditorState(), "ellipse", { x: 149, y: 31 });
-    expect(currentDoc(s).nodes[0]!.transform).toMatchObject({ x: 140, y: 40 });
+    expect(leafOf(currentDoc(s).nodes[0]).transform).toMatchObject({ x: 140, y: 40 });
   });
 });
 
 describe("clickCanvas", () => {
   it("moves the selection so the centre lands on the snapped point", () => {
     const s = L(stateWith([rect("a", 100, 100)], ["a"]), { x: 203, y: 198 });
-    expect(getNode(currentDoc(s), "a")!.transform).toMatchObject({ x: 200, y: 200 });
+    expect(leafOf(getNode(currentDoc(s), "a")).transform).toMatchObject({ x: 200, y: 200 });
   });
 
   it("honours the anchor", () => {
@@ -120,7 +121,7 @@ describe("grid-true moves", () => {
     let s = stateWith([rect("a", 100, 100)], ["a"]);
     s = { ...s, history: { ...s.history, present: { ...currentDoc(s), grid: { ...currentDoc(s).grid, snap: false } } } };
     s = L(s, { x: 203, y: 198 });
-    expect(getNode(currentDoc(s), "a")!.transform).toMatchObject({ x: 203, y: 198 });
+    expect(leafOf(getNode(currentDoc(s), "a")).transform).toMatchObject({ x: 203, y: 198 });
   });
   it("nudging a held edge lands on the next grid line", () => {
     const r = { ...rect("a", 100, 100), width: 86 } as SceneNode;   // right edge at 143
@@ -149,7 +150,7 @@ describe("grid-true moves", () => {
 describe("nudge", () => {
   it("moves the selection by the grid size", () => {
     const s = nudge(stateWith([rect("a", 100, 100)], ["a"]), 1, 0);
-    expect(getNode(currentDoc(s), "a")!.transform.x).toBe(120);
+    expect(leafOf(getNode(currentDoc(s), "a")).transform.x).toBe(120);
   });
 
   it("nudges the held handle", () => {
@@ -169,8 +170,8 @@ describe("nudge", () => {
     const s0 = stateWith([rect("a", 100, 100)], ["a"]);
     const s = nudge(nudge(s0, 1, 0), 1, 0);
     expect(s.history.past.length).toBe(s0.history.past.length + 1);
-    expect(getNode(currentDoc(s), "a")!.transform.x).toBe(140);
-    expect(getNode(currentDoc(undoAction(s)), "a")!.transform.x).toBe(100);
+    expect(leafOf(getNode(currentDoc(s), "a")).transform.x).toBe(140);
+    expect(leafOf(getNode(currentDoc(undoAction(s)), "a")).transform.x).toBe(100);
   });
 });
 
@@ -230,7 +231,7 @@ describe("edit actions", () => {
     expect(currentDoc(s).nodes).toHaveLength(2);
     const copy = currentDoc(s).nodes[1]!;
     expect(s.selection).toEqual([copy.id]);
-    expect(copy.transform).toMatchObject({ x: 120, y: 120 });
+    expect(leafOf(copy).transform).toMatchObject({ x: 120, y: 120 });
   });
 
   it("solo limits hit testing to the selection and clears with it", () => {
@@ -327,7 +328,7 @@ describe("misc", () => {
   it("moveToCursor moves the selection to the cursor", () => {
     let s = setCursor(stateWith([rect("a", 100, 100)], ["a"]), { x: 301, y: 199 });
     s = moveToCursor(s);
-    expect(getNode(currentDoc(s), "a")!.transform).toMatchObject({ x: 300, y: 200 });
+    expect(leafOf(getNode(currentDoc(s), "a")).transform).toMatchObject({ x: 300, y: 200 });
     expect(moveToCursor(createEditorState())).toEqual(createEditorState());
   });
 
@@ -349,10 +350,10 @@ describe("rotate mode, scale and guides", () => {
     let s = toggleRotateMode(stateWith([rect("a", 0, 0)], ["a"]));
     expect(s.rotateMode).toBe(true);
     s = nudge(s, 1, 0);
-    expect(primaryNode(s)!.transform.rotation).toBe(15);
+    expect(leafOf(primaryNode(s)).transform.rotation).toBe(15);
     s = nudge(s, 0, -1);
-    expect(primaryNode(s)!.transform.rotation).toBe(14);
-    expect(primaryNode(s)!.transform.x).toBe(0);
+    expect(leafOf(primaryNode(s)).transform.rotation).toBe(14);
+    expect(leafOf(primaryNode(s)).transform.x).toBe(0);
     s = escape(s);
     expect(s.rotateMode).toBe(false);
     expect(s.selection).toEqual(["a"]);
@@ -361,7 +362,7 @@ describe("rotate mode, scale and guides", () => {
     const n = { ...rect("a", 0, 0), transform: { x: 0, y: 0, rotation: 350 } };
     let s = toggleRotateMode(stateWith([n], ["a"]));
     s = nudge(s, 1, 0);
-    expect(primaryNode(s)!.transform.rotation).toBe(5);
+    expect(leafOf(primaryNode(s)).transform.rotation).toBe(5);
   });
   it("does not enter rotate mode without a selection", () => {
     const s = toggleRotateMode(stateWith([rect("a", 0, 0)]));

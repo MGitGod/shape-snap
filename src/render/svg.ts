@@ -1,7 +1,8 @@
 import { pathData, round } from "../core/curve";
 import { localOutline, nodeBounds } from "../core/geometry";
 import type { Bounds } from "../core/geometry";
-import type { Document, SceneNode } from "../core/types";
+import { expandNode } from "../core/tree";
+import type { Document, LeafNode, SceneNode } from "../core/types";
 
 export interface SvgElementSpec { tag: "rect" | "ellipse" | "polygon" | "path"; attrs: Record<string, string | number> }
 
@@ -11,13 +12,18 @@ export interface ExportOptions {
   background: string | null;
 }
 
-function transformAttr(node: SceneNode): string {
+function transformAttr(node: LeafNode): string {
   const { x, y, rotation } = node.transform;
   const t = `translate(${round(x)} ${round(y)})`;
   return rotation === 0 ? t : `${t} rotate(${round(rotation)})`;
 }
 
-export function nodeToSvg(node: SceneNode): SvgElementSpec {
+/** Every SVG element a node draws (containers expand into their leaves, back to front). */
+export function nodeToSvgList(node: SceneNode): SvgElementSpec[] {
+  return expandNode(node).map(nodeToSvg);
+}
+
+export function nodeToSvg(node: LeafNode): SvgElementSpec {
   let tag: SvgElementSpec["tag"];
   const attrs: Record<string, string | number> = {};
   switch (node.kind) {
@@ -74,12 +80,14 @@ export function exportBounds(doc: Document, opts: ExportOptions): Bounds {
     } else {
       b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
       for (const n of visible) {
-        const nb = nodeBounds(n);
-        const half = n.style.stroke !== null ? n.style.strokeWidth / 2 : 0;
-        b.minX = Math.min(b.minX, nb.minX - half);
-        b.minY = Math.min(b.minY, nb.minY - half);
-        b.maxX = Math.max(b.maxX, nb.maxX + half);
-        b.maxY = Math.max(b.maxY, nb.maxY + half);
+        for (const leaf of expandNode(n)) {
+          const nb = nodeBounds(leaf);
+          const half = leaf.style.stroke !== null ? leaf.style.strokeWidth / 2 : 0;
+          b.minX = Math.min(b.minX, nb.minX - half);
+          b.minY = Math.min(b.minY, nb.minY - half);
+          b.maxX = Math.max(b.maxX, nb.maxX + half);
+          b.maxY = Math.max(b.maxY, nb.maxY + half);
+        }
       }
     }
   } else {
@@ -121,7 +129,7 @@ export function documentToSvg(doc: Document, opts: ExportOptions): string {
   }
   for (const node of doc.nodes) {
     if (!node.visible) continue;
-    lines.push(elementToString(nodeToSvg(node)));
+    for (const spec of nodeToSvgList(node)) lines.push(elementToString(spec));
   }
   lines.push("</svg>");
   return lines.join("\n");

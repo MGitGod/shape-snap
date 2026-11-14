@@ -1,4 +1,5 @@
-import type { GridSettings, SceneNode } from "../core/types";
+import { editableLeaf, withEditableLeaf } from "../core/tree";
+import type { GridSettings, LeafNode, SceneNode } from "../core/types";
 
 export interface PropDef {
   key: string;
@@ -10,31 +11,32 @@ export interface PropDef {
   set: (n: SceneNode, v: number) => Partial<SceneNode>;
 }
 
-const transformDef = (key: "x" | "y" | "rotation", label: string, min: number, max: number, step: number): PropDef => ({
+type LeafProp = Omit<PropDef, "get" | "set"> & { get: (n: LeafNode) => number; set: (n: LeafNode, v: number) => Partial<LeafNode> };
+
+const transformDef = (key: "x" | "y" | "rotation", label: string, min: number, max: number, step: number): LeafProp => ({
   key, label, min, max, step,
   get: (n) => n.transform[key],
   set: (n, v) => ({ transform: { ...n.transform, [key]: v } }),
 });
 
-const styleDef = (key: "strokeWidth" | "opacity", label: string, min: number, max: number, step: number): PropDef => ({
+const styleDef = (key: "strokeWidth" | "opacity", label: string, min: number, max: number, step: number): LeafProp => ({
   key, label, min, max, step,
   get: (n) => n.style[key],
   set: (n, v) => ({ style: { ...n.style, [key]: v } }),
 });
 
-const fieldDef = (key: string, label: string, min: number, max: number, step: number): PropDef => ({
+const fieldDef = (key: string, label: string, min: number, max: number, step: number): LeafProp => ({
   key, label, min, max, step,
   get: (n) => (n as unknown as Record<string, number>)[key] ?? 0,
-  set: (_n, v) => ({ [key]: v }) as Partial<SceneNode>,
+  set: (_n, v) => ({ [key]: v }) as Partial<LeafNode>,
 });
 
-export function propDefsFor(node: SceneNode, grid: GridSettings): PropDef[] {
+function leafDefs(node: LeafNode, grid: GridSettings, withPosition: boolean): LeafProp[] {
   const g = grid.size;
   const half = g / 2;
-  const defs: PropDef[] = [
-    transformDef("x", "横の位置", -2000, 2000, g),
-    transformDef("y", "縦の位置", -2000, 2000, g),
-  ];
+  const defs: LeafProp[] = withPosition
+    ? [transformDef("x", "横の位置", -2000, 2000, g), transformDef("y", "縦の位置", -2000, 2000, g)]
+    : [];
   switch (node.kind) {
     case "rect":
       defs.push(
@@ -65,6 +67,51 @@ export function propDefsFor(node: SceneNode, grid: GridSettings): PropDef[] {
     styleDef("opacity", "不透明度", 0, 1, 0.05),
   );
   return defs;
+}
+
+const containerDef = (key: string, label: string, min: number, max: number, step: number): PropDef => ({
+  key, label, min, max, step,
+  get: (n) => (n as unknown as Record<string, number>)[key] ?? 0,
+  set: (_n, v) => ({ [key]: v }) as Partial<SceneNode>,
+});
+
+/** A leaf property shown on a container: reads and writes the editable leaf inside it. */
+function throughContainer(def: LeafProp): PropDef {
+  return {
+    key: def.key, label: def.label, min: def.min, max: def.max, step: def.step,
+    get: (n) => {
+      const leaf = editableLeaf(n);
+      return leaf ? def.get(leaf) : 0;
+    },
+    set: (n, v) => {
+      const next = withEditableLeaf(n, (leaf) => ({ ...leaf, ...def.set(leaf, v) }) as LeafNode);
+      return (next.kind === "repeat" || next.kind === "mirror" ? { child: next.child } : {}) as Partial<SceneNode>;
+    },
+  };
+}
+
+export function propDefsFor(node: SceneNode, grid: GridSettings): PropDef[] {
+  const g = grid.size;
+  if (node.kind === "group") return [];
+  if (node.kind === "rect" || node.kind === "ellipse" || node.kind === "polygon" || node.kind === "path") {
+    return leafDefs(node, grid, true) as unknown as PropDef[];
+  }
+  const own: PropDef[] =
+    node.kind === "repeat"
+      ? [
+          containerDef("count", "個数", 2, 50, 1),
+          containerDef("dx", "横の間隔", -2000, 2000, g),
+          containerDef("dy", "縦の間隔", -2000, 2000, g),
+          containerDef("scaleStep", "大きさの変化", 0.5, 1.5, 0.05),
+          containerDef("rotateStep", "回転の増分", -180, 180, 15),
+        ]
+      : [
+          ...(node.mode === "rotate" ? [containerDef("count", "回転の数", 2, 36, 1)] : []),
+          containerDef("axisX", "軸の横の位置", -2000, 2000, g),
+          containerDef("axisY", "軸の縦の位置", -2000, 2000, g),
+        ];
+  const leaf = editableLeaf(node);
+  return leaf ? [...own, ...leafDefs(leaf, grid, false).map(throughContainer)] : own;
 }
 
 export function clampToDef(def: PropDef, v: number): number {

@@ -6,6 +6,7 @@ import { nodeBounds, snapPointToDoc } from "../../src/core/geometry";
 import { addGuide, addNode, clearGuides, createDocument, createNode, getNode, removeGuide } from "../../src/core/model";
 import type { Document, PathNode, RectNode, SceneNode } from "../../src/core/types";
 import { validateDocument } from "../../src/core/validate";
+import { leafOf } from "../leaf";
 
 function rect(id: string, x: number, y: number, w = 40, h = 40): RectNode {
   return { ...(createNode(createDocument(), "rect", { x, y }, id) as RectNode), width: w, height: h };
@@ -34,7 +35,7 @@ describe("alignNodes", () => {
   it("does not move locked nodes but uses them as reference", () => {
     const a = { ...rect("a", 0, 0), locked: true };
     const d = alignNodes(docOf(a, rect("b", 100, 0)), ["a", "b"], "right");
-    expect(getNode(d, "a")!.transform.x).toBe(0);
+    expect(leafOf(getNode(d, "a")).transform.x).toBe(0);
     expect(b(d, "b").maxX).toBe(120);
   });
   it("returns the same document for fewer than 2", () => {
@@ -82,10 +83,10 @@ describe("scaleNode", () => {
 describe("toggleFillNone", () => {
   it("moves the fill to the stroke and back", () => {
     const none = toggleFillNone(rect("a", 0, 0));
-    expect(none.style.fill).toBeNull();
-    expect(none.style.stroke).toBe("#1d2330");
-    expect(none.style.strokeWidth).toBeGreaterThanOrEqual(2);
-    expect(toggleFillNone(none).style.fill).toBe("#1d2330");
+    expect(leafOf(none).style.fill).toBeNull();
+    expect(leafOf(none).style.stroke).toBe("#1d2330");
+    expect(leafOf(none).style.strokeWidth).toBeGreaterThanOrEqual(2);
+    expect(leafOf(toggleFillNone(none)).style.fill).toBe("#1d2330");
   });
 });
 

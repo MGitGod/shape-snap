@@ -1,12 +1,13 @@
 import { createElement, useEffect, useLayoutEffect, useRef } from "react";
 import type { MouseEvent } from "react";
-import { snapPointToDoc, worldOutline } from "../core/geometry";
+import { snapPointToDoc, worldOutlines } from "../core/geometry";
+import { editableLeaf, nodeCenter } from "../core/tree";
 import { getHandles } from "../core/handles";
 import type { Point } from "../core/types";
 import { clickCanvas, fitView, setCursor, zoomAt } from "../editor/actions";
 import { currentDoc } from "../editor/state";
 import { dispatch, editorStore, useEditor } from "../editor/store";
-import { nodeToSvg } from "../render/svg";
+import { nodeToSvgList } from "../render/svg";
 
 const HANDLE_PX = 14;
 const CORNER_PX = 16;
@@ -120,22 +121,23 @@ export function CanvasView() {
         </>
       )}
       <g transform={`translate(${panX} ${panY}) scale(${zoom})`}>
-        {doc.nodes.filter((n) => n.visible).map((n) => {
-          const spec = nodeToSvg(n);
-          const attrs: Record<string, string | number> = {};
-          for (const [k, v] of Object.entries(spec.attrs)) {
-            attrs[k.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] = v;
-          }
-          if (solo && !selection.includes(n.id)) {
-            const base = typeof attrs.opacity === "number" ? attrs.opacity : 1;
-            attrs.opacity = base * 0.25;
-          }
-          return createElement(spec.tag, { ...attrs, key: n.id, "data-node-id": n.id });
-        })}
-        {selected.filter((n) => n.visible).map((n) => {
+        {doc.nodes.filter((n) => n.visible).flatMap((n) =>
+          nodeToSvgList(n).map((spec, i) => {
+            const attrs: Record<string, string | number> = {};
+            for (const [k, v] of Object.entries(spec.attrs)) {
+              attrs[k.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] = v;
+            }
+            if (solo && !selection.includes(n.id)) {
+              const base = typeof attrs.opacity === "number" ? attrs.opacity : 1;
+              attrs.opacity = base * 0.25;
+            }
+            return createElement(spec.tag, { ...attrs, key: `${n.id}:${i}`, "data-node-id": n.id });
+          }),
+        )}
+        {selected.filter((n) => n.visible).flatMap((n) => worldOutlines(n).map((o, i) => ({ n, o, i }))).map(({ n, o, i }) => {
           const outline = {
-            key: `outline-${n.id}`,
-            points: worldOutline(n).map((p) => `${p.x},${p.y}`).join(" "),
+            key: `outline-${n.id}:${i}`,
+            points: o.points.map((p) => `${p.x},${p.y}`).join(" "),
             fill: "none",
             stroke: "var(--accent)",
             strokeWidth: 2,
@@ -143,7 +145,7 @@ export function CanvasView() {
             vectorEffect: "non-scaling-stroke" as const,
             pointerEvents: "none" as const,
           };
-          return n.kind === "path" && !n.closed ? <polyline {...outline} /> : <polygon {...outline} />;
+          return o.closed ? <polygon {...outline} /> : <polyline {...outline} />;
         })}
         {handles.map((h) => {
           const common = {
@@ -153,7 +155,8 @@ export function CanvasView() {
             strokeWidth: 2,
             vectorEffect: "non-scaling-stroke" as const,
           };
-          const pt = only && only.kind === "path" && only.smooth ? only.points[h.index] : undefined;
+          const lead = only ? editableLeaf(only) : null;
+          const pt = lead && lead.kind === "path" && lead.smooth ? lead.points[h.index] : undefined;
           if (h.kind === "vertex" && pt?.corner) {
             const r = VERTEX_PX / 2 / zoom;
             const d = `M ${h.pos.x} ${h.pos.y - r} L ${h.pos.x + r} ${h.pos.y} L ${h.pos.x} ${h.pos.y + r} L ${h.pos.x - r} ${h.pos.y} Z`;
@@ -269,8 +272,9 @@ export function CanvasView() {
       )}
       {rotateMode &&
         selected.filter((n) => n.visible).map((n) => {
-          const cx = n.transform.x * zoom + panX;
-          const cy = n.transform.y * zoom + panY;
+          const center = nodeCenter(n);
+          const cx = center.x * zoom + panX;
+          const cy = center.y * zoom + panY;
           return (
             <g key={`rot-${n.id}`} data-testid="rotate-mark" pointerEvents="none">
               <circle cx={cx} cy={cy} r={4} fill="var(--accent)" stroke="var(--panel)" strokeWidth={1.5} />
@@ -284,7 +288,7 @@ export function CanvasView() {
                 fontSize={14}
                 fontWeight={700}
               >
-                {`${Math.round(n.transform.rotation)}°`}
+                {`${Math.round(editableLeaf(n)?.transform.rotation ?? 0)}°`}
               </text>
             </g>
           );

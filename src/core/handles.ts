@@ -1,9 +1,10 @@
 import { localOutline, rotateVector, snapValue, toLocal, toWorld } from "./geometry";
-import type { PathNode, PathPoint, Point, SceneNode } from "./types";
+import { editableLeaf, withEditableLeaf } from "./tree";
+import type { LeafNode, PathNode, PathPoint, Point, SceneNode } from "./types";
 
 export interface Handle {
   id: string;
-  kind: "edge" | "corner" | "vertex";
+  kind: "edge" | "corner" | "vertex" | "axis";
   index: number;
   pos: Point;
   normal: Point;   // corner and vertex handles have {0,0}
@@ -17,7 +18,7 @@ function dot(a: Point, b: Point): number {
   return a.x * b.x + a.y * b.y;
 }
 
-function localHandles(node: SceneNode): LocalHandle[] {
+function localHandles(node: LeafNode): LocalHandle[] {
   if (node.kind === "rect" || node.kind === "ellipse") {
     const w = (node.kind === "rect" ? node.width : node.rx * 2) / 2;
     const h = (node.kind === "rect" ? node.height : node.ry * 2) / 2;
@@ -59,7 +60,7 @@ function localHandles(node: SceneNode): LocalHandle[] {
   return out;
 }
 
-export function getHandles(node: SceneNode): Handle[] {
+function leafHandles(node: LeafNode): Handle[] {
   return localHandles(node).map((h) => ({
     id: h.id,
     kind: h.kind,
@@ -67,6 +68,15 @@ export function getHandles(node: SceneNode): Handle[] {
     pos: toWorld(node, h.pos),
     normal: h.kind === "edge" ? rotateVector(h.normal, node.transform.rotation) : { x: 0, y: 0 },
   }));
+}
+
+export function getHandles(node: SceneNode): Handle[] {
+  const leaf = editableLeaf(node);
+  const handles = leaf ? leafHandles(leaf) : [];
+  if (node.kind === "mirror") {
+    handles.push({ id: "axis:0", kind: "axis", index: 0, pos: { x: node.axisX, y: node.axisY }, normal: { x: 0, y: 0 } });
+  }
+  return handles;
 }
 
 export function findHandleAt(node: SceneNode, p: Point, tolerance: number): Handle | null {
@@ -125,8 +135,8 @@ export const polygonToPath = toPath;
 const CORNER_SIGN: Array<[number, number]> = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
 
 function moveBoxCorner(
-  node: SceneNode & { kind: "rect" | "ellipse" }, index: number, target: Point, minSize: number,
-): SceneNode {
+  node: LeafNode & { kind: "rect" | "ellipse" }, index: number, target: Point, minSize: number,
+): LeafNode {
   const w = (node.kind === "rect" ? node.width : node.rx * 2) / 2;
   const h = (node.kind === "rect" ? node.height : node.ry * 2) / 2;
   const [sx, sy] = CORNER_SIGN[index]!;
@@ -146,9 +156,16 @@ function moveBoxCorner(
 export function moveHandle(
   node: SceneNode, handleId: string, target: Point, minSize: number, gridSize?: number,
 ): SceneNode {
-  const handle = getHandles(node).find((h) => h.id === handleId);
+  if (node.kind === "mirror" && handleId === "axis:0") return { ...node, axisX: target.x, axisY: target.y };
+  return withEditableLeaf(node, (leaf) => moveLeafHandle(leaf, handleId, target, minSize, gridSize));
+}
+
+function moveLeafHandle(
+  node: LeafNode, handleId: string, target: Point, minSize: number, gridSize?: number,
+): LeafNode {
+  const handle = leafHandles(node).find((h) => h.id === handleId);
   if (!handle) return node;
-  if (node.kind === "polygon") return moveHandle(toPath(node)!, handleId, target, minSize, gridSize);
+  if (node.kind === "polygon") return moveLeafHandle(toPath(node)!, handleId, target, minSize, gridSize);
 
   if (node.kind === "path") {
     const n = node.points.length;

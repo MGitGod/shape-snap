@@ -1,6 +1,6 @@
 import { commit, redo, undo } from "../core/history";
 import {
-  alignNodes, distributeNodes, scaleNode, toggleFillNone, type AlignMode,
+  alignNodes, distributeNodes, toggleFillNone, type AlignMode,
 } from "../core/arrange";
 import { anchorPoint, hitStack, nodeBounds, nodesBounds, snapPointToDoc, snapValue, toWorld } from "../core/geometry";
 import { findHandleAt, moveHandle, nextGridLine, nextHandleId, nudgeHandle, toPath } from "../core/handles";
@@ -8,6 +8,7 @@ import {
   addGuide, addNode, clearGuides, createNode, createPathFromPoints, DEFAULT_STYLE, duplicateNodes, insertPathPoint, removeGuide,
   removeNodes, removePathPoint, reorderNode, setGrid, setPathCorner, translateNodes, updateNode,
 } from "../core/model";
+import { nodeCenter, rotateNodeAbout, scaleNodeAbout } from "../core/tree";
 import type { Anchor, Document, GridSettings, PathNode, Point, SceneNode } from "../core/types";
 import {
   createEditorState, currentDoc, primaryNode, ZOOM_MAX, ZOOM_MIN, type EditorState,
@@ -56,8 +57,9 @@ function moveSelectionToPoint(s: EditorState, p: Point, now?: number): EditorSta
   if (s.anchor === "auto") {
     // centre the primary shape on the click, then slide it so its top-left lands on grid lines
     const b = nodeBounds(node);
-    dx = p.x - node.transform.x;
-    dy = p.y - node.transform.y;
+    const c = nodeCenter(node);
+    dx = p.x - c.x;
+    dy = p.y - c.y;
     if (doc.grid.snap) {
       dx = snapValue(b.minX + dx, doc.grid.size) - b.minX;
       dy = snapValue(b.minY + dy, doc.grid.size) - b.minY;
@@ -163,8 +165,7 @@ export function nudge(s: EditorState, dx: -1 | 0 | 1, dy: -1 | 0 | 1, now?: numb
     const ids = new Set(s.selection);
     const nodes = doc.nodes.map((n) => {
       if (!ids.has(n.id) || n.locked) return n;
-      const rotation = (((n.transform.rotation + delta) % 360) + 360) % 360;
-      return { ...n, transform: { ...n.transform, rotation } };
+      return rotateNodeAbout(n, nodeCenter(n), delta);
     });
     return withDoc(s, { ...doc, nodes }, "rotate", now);
   }
@@ -238,15 +239,7 @@ export function scaleSelection(s: EditorState, dir: 1 | -1, now?: number): Edito
   const moved = new Set(targets.map((n) => n.id));
   const nodes = doc.nodes.map((n) => {
     if (!moved.has(n.id)) return n;
-    const scaled = scaleNode(n, f);
-    return {
-      ...scaled,
-      transform: {
-        ...scaled.transform,
-        x: box.minX + (n.transform.x - box.minX) * f,
-        y: box.minY + (n.transform.y - box.minY) * f,
-      },
-    };
+    return scaleNodeAbout(n, { x: box.minX, y: box.minY }, f);
   });
   return withDoc(s, { ...doc, nodes }, "scale", now);
 }
@@ -271,7 +264,7 @@ export function toggleFillNoneSelection(s: EditorState, now?: number): EditorSta
  *  selected shape's centre if there is one, otherwise the point the caller passes. */
 export function addGuideAtCursor(s: EditorState, axis: "h" | "v", now?: number, at?: Point): EditorState {
   const main = primaryNode(s);
-  const from = s.cursor ?? (main ? { x: main.transform.x, y: main.transform.y } : at);
+  const from = s.cursor ?? (main ? nodeCenter(main) : at);
   if (!from) return { ...s, notice: "カーソルをキャンバスに置いてから押してください" };
   const doc = currentDoc(s);
   const snapped = snapPointToDoc(from, doc);

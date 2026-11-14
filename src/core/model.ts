@@ -1,7 +1,8 @@
-import { toLocal } from "./geometry";
+import { snapValue, toLocal } from "./geometry";
+import { flattenNode, sourceBounds, translateNode } from "./tree";
 import {
   GRID_MAX, GRID_MIN,
-  type Document, type GridSettings, type Guide, type NodeKind, type PathNode, type Point, type SceneNode, type Style,
+  type Document, type GridSettings, type Guide, type LeafNode, type NodeKind, type PathNode, type Point, type SceneNode, type Style,
 } from "./types";
 
 export const DEFAULT_STYLE: Style = { fill: "#1d2330", stroke: null, strokeWidth: 2, opacity: 1 };
@@ -11,6 +12,9 @@ const NAME_PREFIX: Record<NodeKind, string> = {
   ellipse: "円",
   polygon: "多角形",
   path: "自由な形",
+  group: "グループ",
+  repeat: "連続配置",
+  mirror: "対称",
 };
 
 export function createDocument(): Document {
@@ -34,7 +38,7 @@ export function createNode(
   kind: "rect" | "ellipse" | "polygon",
   at: Point,
   id?: string,
-): SceneNode {
+): LeafNode {
   const g = doc.grid.size;
   const base = {
     id: id ?? crypto.randomUUID(),
@@ -74,14 +78,7 @@ export function removeNodes(doc: Document, ids: string[]): Document {
 
 export function translateNodes(doc: Document, ids: string[], dx: number, dy: number): Document {
   const set = new Set(ids);
-  return {
-    ...doc,
-    nodes: doc.nodes.map((n) =>
-      set.has(n.id)
-        ? { ...n, transform: { ...n.transform, x: n.transform.x + dx, y: n.transform.y + dy } }
-        : n,
-    ),
-  };
+  return { ...doc, nodes: doc.nodes.map((n) => (set.has(n.id) ? translateNode(n, dx, dy) : n)) };
 }
 
 export function reorderNode(doc: Document, id: string, dir: 1 | -1): Document {
@@ -94,6 +91,16 @@ export function reorderNode(doc: Document, id: string, dir: 1 | -1): Document {
   nodes[i] = b;
   nodes[j] = a;
   return { ...doc, nodes };
+}
+
+/** Give every node inside a container a fresh id (the node itself keeps its id; the caller sets it). */
+function reid(node: SceneNode, makeId: () => string): SceneNode {
+  switch (node.kind) {
+    case "group": return { ...node, children: node.children.map((c) => reid({ ...c, id: makeId() }, makeId)) };
+    case "repeat":
+    case "mirror": return { ...node, child: reid({ ...node.child, id: makeId() }, makeId) };
+    default: return node;
+  }
 }
 
 export function duplicateNodes(
@@ -109,12 +116,8 @@ export function duplicateNodes(
     const src = getNode(doc, id);
     if (!src) continue;
     const newId = makeId();
-    const copy: SceneNode = {
-      ...structuredClone(src),
-      id: newId,
-      name: nextName(next, src.kind),
-      transform: { ...src.transform, x: src.transform.x + dx, y: src.transform.y + dy },
-    };
+    const fresh = reid(structuredClone(src), makeId);
+    const copy: SceneNode = translateNode({ ...fresh, id: newId, name: nextName(next, src.kind) }, dx, dy);
     next = addNode(next, copy);
     newIds.push(newId);
   }
@@ -192,4 +195,86 @@ export function setPathCorner(node: PathNode, index: number, corner: boolean): P
     points: node.points.map((p, i) => (i === index ? { ...p, corner } : { ...p })),
     transform: { ...node.transform },
   };
+}
+
+export function groupNodes(doc: Document, ids: string[], id?: string): { doc: Document; id: string | null } {
+  const set = new Set(ids);
+  const members = doc.nodes.filter((n) => set.has(n.id));
+  if (members.length < 2) return { doc, id: null };
+  const front = members[members.length - 1]!;
+  const groupId = id ?? crypto.randomUUID();
+  const group: SceneNode = {
+    id: groupId,
+    name: nextName(doc, "group"),
+    visible: front.visible,
+    locked: front.locked,
+    role: front.role,
+    kind: "group",
+    children: members,
+  };
+  const nodes: SceneNode[] = [];
+  for (const n of doc.nodes) {
+    if (n === front) nodes.push(group);
+    else if (!set.has(n.id)) nodes.push(n);
+  }
+  return { doc: { ...doc, nodes }, id: groupId };
+}
+
+export function ungroupNode(
+  doc: Document,
+  id: string,
+  makeId: () => string = () => crypto.randomUUID(),
+): { doc: Document; ids: string[] } {
+  const i = doc.nodes.findIndex((n) => n.id === id);
+  const node = doc.nodes[i];
+  if (!node || node.kind === "rect" || node.kind === "ellipse" || node.kind === "polygon" || node.kind === "path") {
+    return { doc, ids: [] };
+  }
+  const parts: SceneNode[] = node.kind === "group" ? node.children : flattenNode(node, makeId);
+  const nodes = [...doc.nodes.slice(0, i), ...parts, ...doc.nodes.slice(i + 1)];
+  return { doc: { ...doc, nodes }, ids: parts.map((p) => p.id) };
+}
+
+function wrap(
+  doc: Document,
+  id: string,
+  kind: "repeat" | "mirror",
+  wrapperId: string | undefined,
+  make: (node: SceneNode, common: { id: string; name: string; visible: boolean; locked: boolean; role: SceneNode["role"] }) => SceneNode,
+): { doc: Document; id: string | null } {
+  const i = doc.nodes.findIndex((n) => n.id === id);
+  const node = doc.nodes[i];
+  if (!node) return { doc, id: null };
+  const newId = wrapperId ?? crypto.randomUUID();
+  const wrapper = make(node, {
+    id: newId,
+    name: nextName(doc, kind),
+    visible: node.visible,
+    locked: node.locked,
+    role: node.role,
+  });
+  return { doc: { ...doc, nodes: doc.nodes.map((n, k) => (k === i ? wrapper : n)) }, id: newId };
+}
+
+export function wrapRepeat(doc: Document, id: string, wrapperId?: string): { doc: Document; id: string | null } {
+  const g = doc.grid.size;
+  return wrap(doc, id, "repeat", wrapperId, (node, common) => {
+    const b = sourceBounds(node);
+    const width = b.maxX - b.minX;
+    return {
+      ...common, kind: "repeat", child: node, count: 5,
+      dx: width > 0 ? snapValue(width, g) + g : 2 * g, dy: 0, scaleStep: 1, rotateStep: 0,
+    };
+  });
+}
+
+export function wrapMirror(doc: Document, id: string, wrapperId?: string): { doc: Document; id: string | null } {
+  const g = doc.grid.size;
+  return wrap(doc, id, "mirror", wrapperId, (node, common) => {
+    const b = sourceBounds(node);
+    return {
+      ...common, kind: "mirror", child: node, mode: "h", count: 6,
+      axisX: snapValue(b.maxX, g) + g, axisY: snapValue((b.minY + b.maxY) / 2, g),
+    };
+  });
 }

@@ -1,12 +1,22 @@
-import { nodeBounds, nodesBounds } from "./geometry";
+import type { Bounds } from "./geometry";
 import { DEFAULT_STYLE } from "./model";
-import type { Document, SceneNode } from "./types";
+import { mapSourceLeaves, scaleLeaf, sourceBounds, translateNode } from "./tree";
+import type { Document, LeafNode, SceneNode } from "./types";
 
 export type AlignMode = "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom";
 
 function shift(node: SceneNode, dx: number, dy: number): SceneNode {
-  if (dx === 0 && dy === 0) return node;
-  return { ...node, transform: { ...node.transform, x: node.transform.x + dx, y: node.transform.y + dy } };
+  return translateNode(node, dx, dy);
+}
+
+function unionBounds(nodes: SceneNode[]): Bounds {
+  const all = nodes.map(sourceBounds);
+  return {
+    minX: Math.min(...all.map((b) => b.minX)),
+    minY: Math.min(...all.map((b) => b.minY)),
+    maxX: Math.max(...all.map((b) => b.maxX)),
+    maxY: Math.max(...all.map((b) => b.maxY)),
+  };
 }
 
 function pick(doc: Document, ids: string[]): SceneNode[] {
@@ -17,11 +27,11 @@ function pick(doc: Document, ids: string[]): SceneNode[] {
 export function alignNodes(doc: Document, ids: string[], mode: AlignMode): Document {
   const picked = pick(doc, ids);
   if (picked.length < 2) return doc;
-  const box = nodesBounds(picked)!;
+  const box = unionBounds(picked);
   const moves = new Map<string, SceneNode>();
   for (const n of picked) {
     if (n.locked) continue;
-    const b = nodeBounds(n);
+    const b = sourceBounds(n);
     let dx = 0;
     let dy = 0;
     switch (mode) {
@@ -38,7 +48,7 @@ export function alignNodes(doc: Document, ids: string[], mode: AlignMode): Docum
 }
 
 function span(n: SceneNode, axis: "x" | "y"): { min: number; max: number } {
-  const b = nodeBounds(n);
+  const b = sourceBounds(n);
   return axis === "x" ? { min: b.minX, max: b.maxX } : { min: b.minY, max: b.maxY };
 }
 
@@ -79,28 +89,20 @@ export function distributeNodes(doc: Document, ids: string[], axis: "x" | "y", g
   return { ...doc, nodes: doc.nodes.map((n) => moves.get(n.id) ?? n) };
 }
 
-export function scaleNode(node: SceneNode, f: number): SceneNode {
-  switch (node.kind) {
-    case "rect":
-      return { ...node, width: node.width * f, height: node.height * f, cornerRadius: node.cornerRadius * f };
-    case "ellipse":
-      return { ...node, rx: node.rx * f, ry: node.ry * f };
-    case "polygon":
-      return { ...node, width: node.width * f, height: node.height * f };
-    case "path":
-      return { ...node, points: node.points.map((p) => ({ ...p, x: p.x * f, y: p.y * f })) };
-  }
+/** Scale one leaf shape around its own center. Containers go through scaleNodeAbout. */
+export function scaleNode(node: LeafNode, f: number): LeafNode {
+  return scaleLeaf(node, f);
 }
 
 export function scaleStepFactor(node: SceneNode, dir: 1 | -1, gridSize: number): number {
-  const b = nodeBounds(node);
+  const b = sourceBounds(node);
   const L = Math.max(b.maxX - b.minX, b.maxY - b.minY);
   const next = L + dir * gridSize;
   if (L <= 0 || next < gridSize) return 1;
   return next / L;
 }
 
-export function toggleFillNone(node: SceneNode): SceneNode {
+export function toggleLeafFillNone(node: LeafNode): LeafNode {
   const st = node.style;
   if (st.fill !== null) {
     return {
@@ -114,4 +116,9 @@ export function toggleFillNone(node: SceneNode): SceneNode {
     };
   }
   return { ...node, style: { ...st, fill: st.stroke ?? DEFAULT_STYLE.fill } };
+}
+
+/** Leaves toggle directly; containers apply it to every source leaf. */
+export function toggleFillNone(node: SceneNode): SceneNode {
+  return mapSourceLeaves(node, toggleLeafFillNone);
 }
