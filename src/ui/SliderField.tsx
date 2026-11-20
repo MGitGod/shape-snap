@@ -18,8 +18,7 @@ function tidy(v: number): number {
 export function SliderField(props: SliderFieldProps) {
   const { propKey, label, value, min, max, step, active, onChange } = props;
   const rowRef = useRef<HTMLDivElement | null>(null);
-  const latest = useRef(props);
-  latest.current = props;
+  const numberRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
   const timer = useRef<number | undefined>(undefined);
@@ -27,16 +26,28 @@ export function SliderField(props: SliderFieldProps) {
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
   useEffect(() => {
-    const el = rowRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent): void => {
-      e.preventDefault();
-      const p = latest.current;
-      const dir = e.deltaY < 0 ? 1 : -1;
-      p.onChange(tidy(Math.min(p.max, Math.max(p.min, p.value + dir * p.step))));
+    const input = numberRef.current;
+    if (!input) return;
+    const onWheel = (event: WheelEvent): void => {
+      if (document.activeElement !== input) return;
+      // A focused number input consumes the wheel to step its value in Chromium.
+      // Keep the draft and focus, and scroll the surrounding pane instead.
+      event.preventDefault();
+      for (let parent = input.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (!/^(auto|scroll)$/.test(style.overflowY) || parent.scrollHeight <= parent.clientHeight) continue;
+        const unit = event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? parent.clientHeight
+          : event.deltaMode === WheelEvent.DOM_DELTA_LINE ? parseFloat(style.lineHeight) || 16 : 1;
+        const delta = event.deltaY * unit;
+        if ((delta < 0 && parent.scrollTop > 0)
+          || (delta > 0 && parent.scrollTop < parent.scrollHeight - parent.clientHeight)) {
+          parent.scrollBy({ top: delta });
+          break;
+        }
+      }
     };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    input.addEventListener("wheel", onWheel, { passive: false });
+    return () => input.removeEventListener("wheel", onWheel);
   }, []);
 
   useEffect(() => {
@@ -72,6 +83,7 @@ export function SliderField(props: SliderFieldProps) {
       />
       <input
         type="number"
+        ref={numberRef}
         className={`field-number${invalid ? " invalid" : ""}`}
         aria-label={`${label}の数値`}
         min={min}

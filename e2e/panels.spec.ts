@@ -39,7 +39,7 @@ test("toolbar places a rect and the list shows it", async ({ page }) => {
   await expect(page.locator('[role="option"]').filter({ hasText: "四角 1" })).toHaveCount(1);
 });
 
-test("number field, wheel, and key navigation in the props panel", async ({ page }) => {
+test("number field and key navigation in the props panel", async ({ page }) => {
   await page.goto("/");
   await page.locator('[data-action="place-rect"]').click();
 
@@ -51,13 +51,6 @@ test("number field, wheel, and key navigation in the props panel", async ({ page
   await expect(widthField(page)).toHaveValue("200");
 
   const g = (await snap(page)).grid.size;
-  const row = page.locator('[data-prop="width"]');
-  const box = await row.boundingBox();
-  if (!box) throw new Error("row not found");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.wheel(0, -100);
-  await expect.poll(async () => (await snap(page)).nodes[0]?.width).toBe(200 + g);
-
   // Tab x2 -> props; ArrowDown x2 selects "width"; ArrowRight adds one step
   await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
@@ -65,10 +58,48 @@ test("number field, wheel, and key navigation in the props panel", async ({ page
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowRight");
-  expect((await snap(page)).nodes[0]?.width).toBe(200 + g * 2);
+  expect((await snap(page)).nodes[0]?.width).toBe(200 + g);
   await page.keyboard.press("Tab");
   expect((await snap(page)).focusArea).toBe("canvas");
 });
+
+for (const target of [".field-label", "input[type=range]", "input[type=number]", "focused number"]) {
+  test(`wheel over ${target} scrolls the pane without editing the document`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await page.goto("/");
+    await page.locator('[data-action="place-rect"]').click();
+    const pane = page.locator(".side");
+    const control = page.locator('[data-prop="width"]').locator(
+      target === "focused number" ? "input[type=number]" : target);
+    if (target === "focused number") {
+      await control.click();
+      // The leading zero distinguishes the uncommitted draft from its numeric value.
+      await page.keyboard.type("0200");
+      await expect(control).toHaveValue("0200");
+    }
+    const before = await page.evaluate(() =>
+      (window as any).__shapeSnap.getState().history.present);
+
+    for (const delta of [40, -40]) {
+      await control.scrollIntoViewIfNeeded();
+      const box = await control.boundingBox();
+      if (!box) throw new Error("control not found");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      const scrollBefore = await pane.evaluate((el) => el.scrollTop);
+      await page.mouse.wheel(0, delta);
+      if (target === "focused number") {
+        await expect(control).toHaveValue("0200");
+      }
+      await expect.poll(async () => {
+        const scrollAfter = await pane.evaluate((el) => el.scrollTop);
+        return delta > 0 ? scrollAfter > scrollBefore : scrollAfter < scrollBefore;
+      }).toBe(true);
+      expect(await page.evaluate(() =>
+        (window as any).__shapeSnap.getState().history.present)).toEqual(before);
+      if (target === "focused number") await expect(control).toBeFocused();
+    }
+  });
+}
 
 test("list keys, colours, visibility and lock", async ({ page }) => {
   await page.goto("/");
@@ -139,12 +170,13 @@ test("three slider changes undo together with one z", async ({ page }) => {
   await page.goto("/");
   await page.locator('[data-action="place-rect"]').click();
   const start = (await snap(page)).nodes[0]?.width;
-  const row = page.locator('[data-prop="width"]');
-  await row.scrollIntoViewIfNeeded();
-  const box = await row.boundingBox();
-  if (!box) throw new Error("row not found");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  for (let i = 0; i < 3; i++) await page.mouse.wheel(0, -100);
+  const slider = page.locator('[data-prop="width"] input[type="range"]');
+  await slider.scrollIntoViewIfNeeded();
+  const box = await slider.boundingBox();
+  if (!box) throw new Error("slider not found");
+  for (const fraction of [0.25, 0.5, 0.75]) {
+    await slider.click({ position: { x: box.width * fraction, y: box.height / 2 } });
+  }
   await expect.poll(async () => (await snap(page)).nodes[0]?.width).not.toBe(start);
   await page.keyboard.press("z");
   expect((await snap(page)).nodes[0]?.width).toBe(start);
