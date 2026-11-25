@@ -98,3 +98,4 @@ npm run e2e         # ブラウザでの通しテスト（Playwright、開発サ
 ## ライセンス
 
 [MIT License](LICENSE) です。無料で使い、直し、配ることができます。配るときは、LICENSE の著作権表示と許諾の文を残してください。
+組み込んでいる部品の著作権表示は、ビルドしたときに `dist/third-party-licenses.txt` に出ます。

@@ -26,6 +26,7 @@
 | 単体テスト | `npm test` |
 | 画面のテスト | `npm run e2e` |
 | ビルド | `npm run build` |
+| GitHub Pages 用のビルド | `npm run build:pages` |
 
 ## 構成
 
