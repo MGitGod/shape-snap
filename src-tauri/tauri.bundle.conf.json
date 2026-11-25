@@ -1,0 +1,12 @@
+{
+  "build": {
+    "beforeBuildCommand": "npm run build && npm run licenses"
+  },
+  "bundle": {
+    "resources": {
+      "../LICENSE": "licenses/LICENSE.txt",
+      "../dist/third-party-licenses.txt": "licenses/third-party-licenses.txt",
+      "target/third-party-licenses-rust.txt": "licenses/third-party-licenses-rust.txt"
+    }
+  }
+}

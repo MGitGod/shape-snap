@@ -1,0 +1,61 @@
+name: Build Windows installer
+
+# Started by hand. Makes a draft release; publishing the draft stays a manual step.
+# Installers must be built here, not on a personal PC: Rust binaries contain the
+# paths of the machine that built them, including its user name.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - run: npm ci
+      - run: npm test
+      - run: npm run app:build
+
+      - name: Install it and start it once
+        run: |
+          $setup = @(Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe)
+          if ($setup.Count -ne 1) { throw "expected one installer, found $($setup.Count)" }
+          Start-Process $setup[0].FullName -ArgumentList '/S' -Wait
+          $dir = Join-Path $env:LOCALAPPDATA 'Shape Snap'
+          foreach ($f in 'app.exe', 'licenses/LICENSE.txt', 'licenses/third-party-licenses.txt', 'licenses/third-party-licenses-rust.txt') {
+            $path = Join-Path $dir $f
+            if (-not (Test-Path $path -PathType Leaf)) { throw "not installed: $f" }
+            if ((Get-Item $path).Length -eq 0) { throw "empty: $f" }
+          }
+          $app = Start-Process (Join-Path $dir 'app.exe') -PassThru
+          Start-Sleep -Seconds 15
+          $app.Refresh()
+          if ($app.HasExited) { throw "the app exited with $($app.ExitCode)" }
+          if ($app.MainWindowTitle -ne 'Shape Snap') { throw "window title: '$($app.MainWindowTitle)'" }
+          Stop-Process $app -Force
+
+      - name: Make a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $name = "Shape-Snap_${version}_x64-setup.exe"
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe
+          Copy-Item $setup.FullName $name
+          gh release create "v$version" $name --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --draft --title "Shape Snap $version" --notes-file .github/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'could not make the draft release' }
+          "$((Get-FileHash $name -Algorithm SHA256).Hash)  $name" >> $env:GITHUB_STEP_SUMMARY

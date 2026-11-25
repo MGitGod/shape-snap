@@ -12,7 +12,8 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "app:dev": "tauri dev",
-    "app:build": "tauri build",
+    "app:build": "tauri build --config src-tauri/tauri.bundle.conf.json",
+    "licenses": "node scripts/rust-licenses.mjs",
     "icon": "node scripts/make-icon.mjs"
   },
   "dependencies": {

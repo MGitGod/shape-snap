@@ -27,6 +27,7 @@
 | 画面のテスト | `npm run e2e` |
 | ビルド | `npm run build` |
 | GitHub Pages 用のビルド | `npm run build:pages` |
+| 配布用のインストーラー（手元で作ったものは配らない。`docs/desktop.md`） | `gh workflow run release.yml --ref main` |
 
 ## 構成
 

@@ -13,7 +13,8 @@
 | 目的 | コマンド |
 |---|---|
 | 開発（窓が開き、変更がすぐ映る） | `npm run app:dev` |
-| 配布用のビルド | `npm run app:build` |
+| 手元で使うビルド | `npm run app:build` |
+| Rust の部品の著作権表示だけ作る | `npm run licenses` |
 | アイコンの作り直し | `npm run icon` |
 
 初回は Rust の部品の取得とコンパイルで 10 分以上かかります。2 回目からは差分だけなので早くなります。
@@ -25,6 +26,18 @@
 
 インストーラーをエクスプローラーで選んでクリックして開くと、案内に沿って入ります。
 入れずに試すだけなら、`app.exe` を直接開いてもかまいません。
+
+## 人に配るとき
+
+**手元で作ったインストーラーを人に渡さないこと。** Rust の実行ファイルには、作った PC のパス（ユーザー名を含む）が入ります。
+配るものは GitHub の上で作ります。
+
+1. `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` の版を上げて `main` に入れる（同じ版の下書きやリリースがあると失敗する）。
+2. `gh workflow run release.yml --ref main` を実行する（GitHub の Actions の画面から「Run workflow」を押してもよい）。テスト、ビルド、インストール、起動の確認が通ると、下書きのリリースができる。
+3. 下書きの中身を確かめてから、使う人の指示で公開する。
+
+入れた場所の `licenses` フォルダに、`LICENSE` と、組み込んだ部品（JavaScript と Rust）の著作権表示が入ります。
+Rust の表示は `scripts/rust-licenses.mjs` が集めます。表示の無い部品が増えるとビルドが止まるので、元のリポジトリの文を `scripts/license-texts/` に足します。
 
 ## ブラウザ版との違い
 
