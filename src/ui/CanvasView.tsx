@@ -207,8 +207,8 @@ export function CanvasView() {
           const leaves = expandNode(n);
           return worldOutlines(n).map((o, i) => ({ n, o, i, copy: !sourceIds.has(leaves[i]?.id ?? "") }));
         }).map(({ n, o, i, copy }) => {
+          const key = `outline-${n.id}:${i}`;
           const outline = {
-            key: `outline-${n.id}:${i}`,
             "data-outline": copy ? "copy" : "source",
             points: o.points.map((p) => `${p.x},${p.y}`).join(" "),
             fill: "none",
@@ -218,7 +218,7 @@ export function CanvasView() {
             vectorEffect: "non-scaling-stroke" as const,
             pointerEvents: "none" as const,
           };
-          return o.closed ? <polygon {...outline} /> : <polyline {...outline} />;
+          return o.closed ? <polygon key={key} {...outline} /> : <polyline key={key} {...outline} />;
         })}
         {handles.map((h) => {
           const common = {
